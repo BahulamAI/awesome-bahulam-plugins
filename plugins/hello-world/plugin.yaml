@@ -1,0 +1,106 @@
+apiVersion: bahulam.plugin/1
+kind: Plugin
+metadata:
+  name: hello-world
+  version: 1.0.0
+  description: >
+    Reference plugin — a minimal but complete example of the three
+    extension surfaces Bahulam exposes: tools, sub-agents, and workspace
+    views. Clone it and start hacking.
+  author: BahulamAI
+  repository: https://github.com/BahulamAI/awesome-bahulam-plugins
+
+spec:
+  # ── Tools ──────────────────────────────────────────────────────────
+  # Each tool is a client-side handler under ./tools/. The `parameters`
+  # block below is a JSON Schema; the model sees this and calls the tool
+  # with matching arguments. The handler runs in your CLI process.
+  tools:
+    - name: hello
+      description: >
+        Return a friendly greeting. The simplest possible tool — takes a
+        name, returns a message. Use this as the template for your own
+        parameter-in / value-out helpers.
+      handler: ./tools/hello.mjs
+      parameters:
+        type: object
+        properties:
+          name:
+            type: string
+            description: "Who to greet (default: 'world')"
+          shout:
+            type: boolean
+            description: "Uppercase the message"
+        required: []
+
+    - name: word_count
+      description: >
+        Count words, characters, sentences, and paragraphs in a piece of
+        text. Demonstrates returning a structured object the agent can
+        reason about.
+      handler: ./tools/word-count.mjs
+      parameters:
+        type: object
+        properties:
+          text:
+            type: string
+            description: "The text to analyze"
+        required: [text]
+
+    - name: collatz_sequence
+      description: >
+        Compute the Collatz sequence for any positive integer n. Applies
+        n→n/2 if even, n→3n+1 if odd, until reaching 1. Returns the full
+        trajectory, step count, and peak value — perfect for charting.
+        A pure computation (no I/O) with a hard step cap so a bad input
+        can't hang the CLI.
+      handler: ./tools/collatz.mjs
+      parameters:
+        type: object
+        properties:
+          start:
+            type: integer
+            description: "Starting integer (must be ≥ 1). Try 27 for a dramatic climb."
+          max_steps:
+            type: integer
+            description: "Optional cap on iterations (default 10000)"
+        required: [start]
+
+  # ── Sub-agents ─────────────────────────────────────────────────────
+  # Sub-agents are prompts + a tool whitelist. The primary agent can
+  # delegate to them; they can also be invoked directly from the REPL
+  # with `/run hello-greeter`.
+  agents:
+    - slug: hello-greeter
+      name: Hello Greeter
+      role: specialist
+      description: >
+        A cheerful specialist that greets users and analyzes short pieces
+        of text. Reference sub-agent — copy the shape to build your own.
+      tools: [hello, word_count, collatz_sequence]
+      system_prompt: |
+        You are the Hello Greeter — a warm, concise specialist.
+
+        When greeted, respond by:
+        1. Calling `hello` to produce a friendly opener.
+        2. If the user provided text, calling `word_count` and surfacing
+           one interesting stat (e.g. longest word or sentence count).
+        3. If the user provided a number, calling `collatz_sequence` and
+           reporting the step count and peak — the Collatz conjecture is
+           a great conversation starter.
+
+        Rules:
+        - Always use the provided tools; never fabricate greetings, counts,
+          or trajectories.
+        - Keep responses under 5 lines.
+        - Never emit code blocks unless the user explicitly asks.
+
+  # ── Workspace views ────────────────────────────────────────────────
+  # Each view is a plain HTML file rendered as a central-panel tab in
+  # the browser workspace. Views can call any tool the CLI knows about
+  # via POST /api/tools/execute using the token in the iframe URL.
+  workspace:
+    views:
+      - type: panel
+        name: Hello World
+        source: ./workspace/index.html

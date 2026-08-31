@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Hello World</title>
+<style>
+:root{--bg:#FFFDF7;--panel:#fff;--border:rgba(27,27,27,.10);--fg:#1B1B1B;--muted:rgba(27,27,27,.55);--brand:#0891B2;--ok:#047857;--err:#B91C1C;--mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.55 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;padding:24px}
+h1{font-size:20px;margin:0 0 4px}
+p.lede{color:var(--muted);margin:0 0 24px;max-width:640px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px}
+h2{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--brand);margin:0 0 10px}
+.row{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px}
+label{display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted);flex:1;min-width:0}
+input,textarea,select{border:1px solid var(--border);border-radius:6px;padding:6px 8px;font:13px var(--mono);background:#fff;color:var(--fg)}
+input:focus,textarea:focus,select:focus{outline:1px solid var(--brand);border-color:var(--brand)}
+textarea{width:100%;min-height:80px;resize:vertical;font-size:12px}
+button{border:0;background:var(--fg);color:#fff;border-radius:6px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer}
+button:hover{background:#333}
+button.ghost{background:transparent;color:var(--fg);border:1px solid var(--border)}
+button.ghost:hover{background:#F7F5EF}
+label.checkbox{flex-direction:row;align-items:center;gap:6px;font-size:12px;color:var(--fg);cursor:pointer;flex:0}
+.out{background:#0D1117;color:#E5E7EB;border-radius:8px;padding:12px;font:12px/1.45 var(--mono);white-space:pre-wrap;max-height:240px;overflow:auto;margin-top:8px}
+.out.empty{color:rgba(229,231,235,.35)}
+.status{font-size:11px;color:var(--muted);margin-top:6px}
+.status.ok{color:var(--ok)}
+.status.err{color:var(--err)}
+footer{margin-top:24px;font-size:11px;color:var(--muted)}
+footer code{background:#F7F5EF;padding:1px 5px;border-radius:3px;font-family:var(--mono)}
+</style>
+</head>
+<body>
+<h1>Hello, from a plugin panel.</h1>
+<p class="lede">This whole panel is served by the hello-world plugin. Every button below calls one of the plugin's own tools through <code style="font-family:var(--mono)">POST /api/tools/execute</code>. Read <code style="font-family:var(--mono)">plugins/hello-world/workspace/index.html</code> to see how.</p>
+
+<div class="grid">
+
+  <div class="card">
+    <h2>hello</h2>
+    <div class="row">
+      <label>name<input id="hName" placeholder="world"></label>
+      <label class="checkbox"><input id="hShout" type="checkbox">shout</label>
+      <button id="hGo">Say hello</button>
+    </div>
+    <div class="out empty" id="hOut">click "Say hello"</div>
+    <div class="status" id="hStatus"></div>
+  </div>
+
+  <div class="card">
+    <h2>word_count</h2>
+    <div class="row">
+      <label style="flex-basis:100%">text
+        <textarea id="wText" placeholder="Paste some text...">The quick brown fox jumps over the lazy dog. Bahulam plugins run entirely client-side.</textarea>
+      </label>
+    </div>
+    <div class="row" style="justify-content:flex-end">
+      <button class="ghost" id="wClear">Clear</button>
+      <button id="wGo">Analyze</button>
+    </div>
+    <div class="out empty" id="wOut">click "Analyze"</div>
+    <div class="status" id="wStatus"></div>
+  </div>
+
+  <div class="card" style="grid-column:1/-1">
+    <h2>collatz_sequence — a math trick with a visualization</h2>
+    <p style="margin:0 0 10px;color:var(--muted);font-size:12px">
+      Pick any positive integer <em>n</em>. If it's even, halve it. If it's odd, triple it and add 1. Repeat.
+      Every known starting point (up to 2<sup>68</sup>) eventually crashes to 1 — but nobody has proved it.
+      Try <b>27</b> for a spectacular climb.
+    </p>
+    <div class="row">
+      <label>start<input id="cStart" type="number" min="1" step="1" value="27"></label>
+      <button class="ghost" id="cRand">Random 1-999</button>
+      <button id="cGo">Run</button>
+    </div>
+    <div id="cSummary" class="status"></div>
+    <canvas id="cChart" width="1200" height="380" style="width:100%;height:220px;background:#0D1117;border-radius:8px;margin-top:10px;display:block"></canvas>
+    <div class="out empty" id="cOut" style="max-height:120px;margin-top:8px">click "Run"</div>
+    <div class="status" id="cStatus"></div>
+  </div>
+
+</div>
+
+<footer>
+  Plugin: <code>hello-world</code> · tools: <code>hello</code>, <code>word_count</code>, <code>collatz_sequence</code> · sub-agent: <code>hello-greeter</code>
+</footer>
+
+<script>
+// The workspace embeds every plugin view in a sandboxed iframe and passes
+// the local-session token via the query string. We use that token to call
+// /api/tools/execute — the same endpoint the agent uses.
+const token = new URLSearchParams(location.search).get('token') || '';
+
+async function tool(name, args) {
+  const res = await fetch('/api/tools/execute', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Bahulam-Local-Token': token },
+    body: JSON.stringify({ name, args }),
+  });
+  const body = await res.json();
+  if (!res.ok || body.ok === false) throw new Error(body.error || body.message || 'request failed');
+  const r = body.result;
+  if (r && r.success === false) throw new Error(String(r.output));
+  return r && r.output !== undefined ? r.output : r;
+}
+
+function show(outEl, statusEl, payload, timeMs) {
+  outEl.classList.remove('empty');
+  outEl.textContent = typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
+  statusEl.className = 'status ok';
+  statusEl.textContent = `✓ ${timeMs.toFixed(0)} ms`;
+}
+function fail(outEl, statusEl, err) {
+  outEl.classList.remove('empty');
+  outEl.textContent = String(err && err.message || err);
+  statusEl.className = 'status err';
+  statusEl.textContent = '✗ tool call failed';
+}
+async function bind(btnId, outId, statusId, factory) {
+  const btn = document.getElementById(btnId);
+  const outEl = document.getElementById(outId);
+  const statusEl = document.getElementById(statusId);
+  btn.addEventListener('click', async () => {
+    btn.disabled = true; statusEl.className = 'status'; statusEl.textContent = '...';
+    const t0 = performance.now();
+    try { show(outEl, statusEl, await factory(), performance.now() - t0); }
+    catch (err) { fail(outEl, statusEl, err); }
+    finally { btn.disabled = false; }
+  });
+}
+
+bind('hGo', 'hOut', 'hStatus', () => tool('hello', {
+  name: document.getElementById('hName').value.trim() || undefined,
+  shout: document.getElementById('hShout').checked,
+}));
+
+bind('wGo', 'wOut', 'wStatus', () => tool('word_count', {
+  text: document.getElementById('wText').value,
+}));
+document.getElementById('wClear').addEventListener('click', () => {
+  document.getElementById('wText').value = '';
+  document.getElementById('wOut').textContent = 'click "Analyze"';
+  document.getElementById('wOut').classList.add('empty');
+  document.getElementById('wStatus').textContent = '';
+});
+
+// Collatz — draws the trajectory. Log-scale y-axis so peaks stay readable
+// even when a sequence shoots up 40× before crashing.
+document.getElementById('cRand').addEventListener('click', () => {
+  document.getElementById('cStart').value = 1 + Math.floor(Math.random() * 999);
+});
+const cBtn = document.getElementById('cGo');
+cBtn.addEventListener('click', async () => {
+  const start = Math.max(1, Math.floor(Number(document.getElementById('cStart').value) || 1));
+  const statusEl = document.getElementById('cStatus');
+  const outEl = document.getElementById('cOut');
+  const summaryEl = document.getElementById('cSummary');
+  cBtn.disabled = true; statusEl.className = 'status'; statusEl.textContent = '...';
+  const t0 = performance.now();
+  try {
+    const r = await tool('collatz_sequence', { start });
+    summaryEl.className = 'status ok';
+    summaryEl.textContent = `n=${r.start} · ${r.steps} steps · peak ${r.peak.toLocaleString()} (${r.peak_ratio}× start) · ${r.converged ? 'converged to 1' : 'did not converge'}`;
+    drawCollatz(r.sequence);
+    // Preview: first 10 and last 5 terms, no matter how long the sequence.
+    const preview = r.sequence.length <= 20
+      ? r.sequence.join(' → ')
+      : r.sequence.slice(0, 10).join(' → ') + '  …  ' + r.sequence.slice(-5).join(' → ');
+    outEl.classList.remove('empty');
+    outEl.textContent = preview;
+    statusEl.className = 'status ok';
+    statusEl.textContent = `✓ ${(performance.now() - t0).toFixed(0)} ms`;
+  } catch (err) { fail(outEl, statusEl, err); }
+  finally { cBtn.disabled = false; }
+});
+
+function drawCollatz(seq) {
+  const c = document.getElementById('cChart');
+  const ctx = c.getContext('2d');
+  // Handle HiDPI so lines stay crisp.
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = c.clientWidth || c.width;
+  const cssH = c.clientHeight || c.height;
+  c.width = cssW * dpr; c.height = cssH * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cssW, cssH);
+  if (!seq || seq.length < 2) return;
+
+  const L = 44, R = 12, T = 10, B = 22;
+  const w = cssW - L - R, h = cssH - T - B;
+  const yMax = Math.max(...seq);
+  // log(v+1) so y=1 anchors at the baseline
+  const logMax = Math.log(yMax + 1);
+  const X = i => L + (i / (seq.length - 1)) * w;
+  const Y = v => T + h - (Math.log(v + 1) / logMax) * h;
+
+  // Y-axis ticks at powers of 10 within range.
+  ctx.strokeStyle = 'rgba(255,255,255,.08)';
+  ctx.fillStyle = 'rgba(229,231,235,.55)';
+  ctx.font = '10px ui-monospace, Menlo, monospace';
+  for (let p = 0; Math.pow(10, p) <= yMax; p++) {
+    const v = Math.pow(10, p);
+    const y = Y(v);
+    ctx.beginPath(); ctx.moveTo(L, y); ctx.lineTo(cssW - R, y); ctx.stroke();
+    ctx.fillText(String(v), 6, y + 3);
+  }
+  // X-axis ticks — first, last, and up to 3 evenly spaced.
+  const nTicks = Math.min(5, seq.length);
+  for (let i = 0; i < nTicks; i++) {
+    const idx = Math.round((seq.length - 1) * (i / (nTicks - 1)));
+    ctx.fillText(String(idx), X(idx) - 6, cssH - 6);
+  }
+
+  // Line
+  ctx.beginPath();
+  seq.forEach((v, i) => i ? ctx.lineTo(X(i), Y(v)) : ctx.moveTo(X(i), Y(v)));
+  ctx.strokeStyle = '#0891B2'; ctx.lineWidth = 1.75; ctx.stroke();
+
+  // Peak dot + label
+  const peakIdx = seq.indexOf(yMax);
+  ctx.beginPath(); ctx.arc(X(peakIdx), Y(yMax), 3.5, 0, Math.PI * 2);
+  ctx.fillStyle = '#F59E0B'; ctx.fill();
+  ctx.fillStyle = '#F59E0B';
+  ctx.fillText(`peak ${yMax.toLocaleString()}`, Math.min(cssW - 90, X(peakIdx) + 6), Math.max(T + 10, Y(yMax) - 4));
+}
+</script>
+</body>
+</html>

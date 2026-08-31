@@ -1,0 +1,14 @@
+{
+  "$schema": "https://docs.bahulam.ai/schemas/plugin-registry-1.json",
+  "plugins": [
+    {
+      "name": "hello-world",
+      "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
+      "ref": "main",
+      "subdir": "plugins/hello-world",
+      "description": "Minimal reference plugin — one tool, one sub-agent, one workspace panel",
+      "author": "BahulamAI",
+      "tags": ["reference", "starter"]
+    }
+  ]
+}
