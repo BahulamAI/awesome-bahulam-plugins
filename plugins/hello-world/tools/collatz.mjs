@@ -20,7 +20,13 @@ export const description = 'Compute the Collatz sequence for a positive integer'
 
 const HARD_STEP_CAP = 10000; // n=27 needs 111 steps and peaks at 9232; 10k is very safe
 
-export async function call(args = {}) {
+// `options.state` is the Shared Blackboard — a per-plugin SQLite handle
+// the CLI injects for us. First property access is a Promise, awaited
+// once and then cached on the handler options object for the rest of
+// the call. Any writes fire a debounced `plugin_state_changed` SSE
+// event so the workspace view's history table re-renders live as the
+// agent runs. Handlers that don't touch `state` pay zero cost.
+export async function call(args = {}, options = {}) {
   const n = Number(args.start);
   if (!Number.isInteger(n) || n < 1) {
     return { success: false, output: 'collatz_sequence: `start` must be a positive integer' };
@@ -42,6 +48,23 @@ export async function call(args = {}) {
   }
 
   const converged = x === 1;
+
+  // Persist the run so the workspace view and future queries can see it.
+  // Wrapped in try/catch so a state failure never breaks the tool output —
+  // the compute succeeded, the persistence is a bonus.
+  const state = options.state ? await options.state : null;
+  if (state) {
+    try {
+      state.append('collatz_runs', {
+        start: n,
+        steps,
+        peak,
+        peak_ratio: Math.round((peak / n) * 100) / 100,
+        converged,
+      });
+    } catch { /* view still gets the result; history simply won't include this run */ }
+  }
+
   return {
     success: true,
     output: {

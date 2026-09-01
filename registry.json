@@ -9,6 +9,15 @@
       "description": "Minimal reference plugin — one tool, one sub-agent, one workspace panel",
       "author": "BahulamAI",
       "tags": ["reference", "starter"]
+    },
+    {
+      "name": "hello-mcp",
+      "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
+      "ref": "main",
+      "subdir": "plugins/hello-mcp",
+      "description": "Reference for Plugin = MCP + UX — a bundled MCP server, a JS state tool, a sub-agent that composes both, and a live workspace view",
+      "author": "BahulamAI",
+      "tags": ["reference", "mcp", "starter"]
     }
   ]
 }

@@ -81,10 +81,40 @@ footer code{background:#F7F5EF;padding:1px 5px;border-radius:3px;font-family:var
     <div class="status" id="cStatus"></div>
   </div>
 
+  <div class="card" style="grid-column:1/-1">
+    <h2>collatz history — the Shared Blackboard <span id="hLive" style="font-weight:400;color:var(--muted);font-size:10px">· connecting…</span></h2>
+    <p style="margin:0 0 10px;color:var(--muted);font-size:12px">
+      Every run — from this panel <b>or</b> from the agent — is written to
+      this plugin's <code>~/.bahulam/data/hello-world/state.db</code> and streamed
+      back here via SSE. Ask the agent to run a few (<em>"do collatz on 27, 7, and 15"</em>) and watch this table light up in real time.
+    </p>
+    <div class="row" style="margin-bottom:6px">
+      <button class="ghost" id="hReload">Reload</button>
+      <button class="ghost" id="hClear">Clear history</button>
+      <span class="status" id="hStatus"></span>
+    </div>
+    <table id="hTable" style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead>
+        <tr style="text-align:left;color:var(--muted);border-bottom:1px solid var(--border)">
+          <th style="padding:6px 8px">#</th>
+          <th style="padding:6px 8px">time</th>
+          <th style="padding:6px 8px;text-align:right">start</th>
+          <th style="padding:6px 8px;text-align:right">steps</th>
+          <th style="padding:6px 8px;text-align:right">peak</th>
+          <th style="padding:6px 8px;text-align:right">peak×</th>
+          <th style="padding:6px 8px">converged</th>
+        </tr>
+      </thead>
+      <tbody id="hBody">
+        <tr><td colspan="7" style="padding:12px;color:var(--muted)">loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
 </div>
 
 <footer>
-  Plugin: <code>hello-world</code> · tools: <code>hello</code>, <code>word_count</code>, <code>collatz_sequence</code> · sub-agent: <code>hello-greeter</code>
+  Plugin: <code>hello-world</code> · tools: <code>hello</code>, <code>word_count</code>, <code>collatz_sequence</code>, <code>list_collatz_runs</code> · sub-agent: <code>hello-greeter</code> · state: <code>~/.bahulam/data/hello-world/state.db</code>
 </footer>
 
 <script>
@@ -175,6 +205,91 @@ cBtn.addEventListener('click', async () => {
   } catch (err) { fail(outEl, statusEl, err); }
   finally { cBtn.disabled = false; }
 });
+
+// ── Shared-Blackboard live history ──────────────────────────────────
+// Fetches from /api/plugin-state (POST {op:'list', stream:'collatz_runs'})
+// on load, and subscribes to /api/events so any state write — from the
+// panel above OR the agent — triggers a fresh render. That's the whole
+// "reactive pulse" moment: the agent runs collatz, the row shows up here
+// with no click required.
+const PLUGIN = 'hello-world';
+async function state(op, extra = {}) {
+  const res = await fetch('/api/plugin-state/' + PLUGIN, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Bahulam-Local-Token': token },
+    body: JSON.stringify({ op, ...extra }),
+  });
+  const body = await res.json();
+  if (!res.ok || body.ok === false) throw new Error(body.error || body.message || 'state op failed');
+  return body.result;
+}
+function fmtTime(iso) { return (iso || '').replace('T',' ').slice(0, 19); }
+async function reloadHistory() {
+  const body = document.getElementById('hBody');
+  try {
+    const rows = await state('list', { stream: 'collatz_runs', limit: 100, order: 'desc' });
+    if (!rows.length) {
+      body.innerHTML = '<tr><td colspan="7" style="padding:12px;color:var(--muted)">no runs yet — click Run above, or ask the agent</td></tr>';
+      return;
+    }
+    body.innerHTML = rows.map(r => {
+      const p = r.payload || {};
+      return `<tr style="border-bottom:1px solid #F0EFEA">
+        <td style="padding:4px 8px;color:var(--muted);font-size:10px">${r.id}</td>
+        <td style="padding:4px 8px;color:var(--muted);font-family:var(--mono)">${fmtTime(r.created_at)}</td>
+        <td style="padding:4px 8px;text-align:right;font-family:var(--mono)">${p.start ?? ''}</td>
+        <td style="padding:4px 8px;text-align:right;font-family:var(--mono)">${p.steps ?? ''}</td>
+        <td style="padding:4px 8px;text-align:right;font-family:var(--mono)">${(p.peak ?? 0).toLocaleString()}</td>
+        <td style="padding:4px 8px;text-align:right;font-family:var(--mono)">${p.peak_ratio ?? ''}×</td>
+        <td style="padding:4px 8px">${p.converged ? '<span style="color:var(--ok)">✓</span>' : '<span style="color:var(--err)">✗</span>'}</td>
+      </tr>`;
+    }).join('');
+  } catch (err) {
+    body.innerHTML = `<tr><td colspan="7" style="padding:12px;color:var(--err)">${err.message}</td></tr>`;
+  }
+}
+document.getElementById('hReload').addEventListener('click', reloadHistory);
+document.getElementById('hClear').addEventListener('click', async () => {
+  if (!confirm('Delete every persisted Collatz run for this plugin?')) return;
+  try {
+    // No dedicated delete-stream op yet; a raw DELETE via query() works
+    // and demonstrates the SQL escape hatch.
+    await state('query', { sql: "DELETE FROM records WHERE stream = ?", params: ['collatz_runs'] });
+    await reloadHistory();
+    document.getElementById('hStatus').className = 'status ok';
+    document.getElementById('hStatus').textContent = 'cleared';
+  } catch (err) {
+    document.getElementById('hStatus').className = 'status err';
+    document.getElementById('hStatus').textContent = err.message;
+  }
+});
+
+// SSE: the workspace's shared event stream. Filter to our plugin's
+// records:append:collatz_runs events so an unrelated plugin's chatter
+// doesn't trigger reloads. Debounced 200ms client-side so a burst of
+// agent-driven runs coalesces into a single re-render.
+let _reloadTimer = null;
+function scheduleReload() {
+  if (_reloadTimer) clearTimeout(_reloadTimer);
+  _reloadTimer = setTimeout(reloadHistory, 200);
+}
+try {
+  const es = new EventSource('/api/events?token=' + encodeURIComponent(token));
+  es.addEventListener('open',  () => { document.getElementById('hLive').textContent = '· live'; });
+  es.addEventListener('error', () => { document.getElementById('hLive').textContent = '· reconnecting…'; });
+  es.addEventListener('plugin_state_changed', (ev) => {
+    let evt = {}; try { evt = JSON.parse(ev.data || '{}'); } catch { /* ignore */ }
+    if (evt.plugin === PLUGIN && evt.kind === 'records' && evt.target === 'collatz_runs') {
+      scheduleReload();
+    } else if (evt.plugin === PLUGIN && evt.kind === 'kv' && evt.target === '*') {
+      // A query() DML update — could be our own DELETE or something else.
+      scheduleReload();
+    }
+  });
+} catch { /* SSE unsupported → history stays load-only */ }
+
+// Initial fetch — after the collatz card is wired so state() exists.
+reloadHistory();
 
 function drawCollatz(seq) {
   const c = document.getElementById('cChart');

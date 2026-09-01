@@ -6,6 +6,7 @@
 import { call as hello } from './tools/hello.mjs';
 import { call as wordCount } from './tools/word-count.mjs';
 import { call as collatz } from './tools/collatz.mjs';
+import { call as listRuns } from './tools/list-collatz-runs.mjs';
 
 let failures = 0;
 function check(label, cond, detail = '') {
@@ -59,6 +60,42 @@ function check(label, cond, detail = '') {
 
   const capped = await collatz({ start: 27, max_steps: 5 });
   check('collatz respects max_steps', capped.output.steps === 5 && !capped.output.converged);
+}
+
+// list_collatz_runs — without a state handle, returns an empty stub
+{
+  const r = await listRuns({});
+  check('list_collatz_runs returns empty shape when state is absent',
+    r.success && Array.isArray(r.output.runs) && r.output.count === 0);
+}
+
+// Shared-blackboard round trip — simulate what the CLI's tool-executor
+// injects: an `options.state` promise resolving to a state proxy. Uses
+// an in-memory sqlite so we don't require BAHULAM_DATA_DIR here.
+{
+  // Simple KV/records shim matching the state proxy's public shape.
+  const rows = [];
+  const fakeState = {
+    append(stream, payload) {
+      rows.push({ id: rows.length + 1, stream, payload, created_at: new Date(0).toISOString() });
+      return rows.length;
+    },
+    list(stream, { limit = 50, order = 'desc' } = {}) {
+      const filtered = rows.filter(r => r.stream === stream);
+      const ordered = order === 'asc' ? filtered : [...filtered].reverse();
+      return ordered.slice(0, limit);
+    },
+  };
+  const opts = { state: Promise.resolve(fakeState) };
+  await collatz({ start: 6 }, opts);
+  await collatz({ start: 27 }, opts);
+  const listed = await listRuns({ limit: 10, order: 'desc' }, opts);
+  check('collatz persists runs to the shared blackboard',
+    listed.success && listed.output.count === 2);
+  check('list_collatz_runs newest-first order',
+    listed.output.runs[0].start === 27 && listed.output.runs[1].start === 6);
+  check('list_collatz_runs surfaces peak from payload',
+    listed.output.runs[0].peak === 9232);
 }
 
 console.log(failures === 0 ? '\nALL TESTS PASSED' : `\n${failures} FAILURES`);

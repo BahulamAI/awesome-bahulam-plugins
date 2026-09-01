@@ -52,8 +52,9 @@ spec:
         Compute the Collatz sequence for any positive integer n. Applies
         n→n/2 if even, n→3n+1 if odd, until reaching 1. Returns the full
         trajectory, step count, and peak value — perfect for charting.
-        A pure computation (no I/O) with a hard step cap so a bad input
-        can't hang the CLI.
+        Every run is persisted to the plugin's Shared Blackboard so the
+        workspace view (and future calls to list_collatz_runs) can see
+        history. A hard step cap prevents runaway inputs.
       handler: ./tools/collatz.mjs
       parameters:
         type: object
@@ -66,6 +67,25 @@ spec:
             description: "Optional cap on iterations (default 10000)"
         required: [start]
 
+    - name: list_collatz_runs
+      description: >
+        Read past Collatz runs from the plugin's Shared Blackboard.
+        Demonstrates the READ side of persistent plugin state — anything
+        the agent OR the human panel has run through collatz_sequence
+        shows up here.
+      handler: ./tools/list-collatz-runs.mjs
+      parameters:
+        type: object
+        properties:
+          limit:
+            type: integer
+            description: "Max rows to return (1..500, default 20)"
+          order:
+            type: string
+            enum: [asc, desc]
+            description: "Chronological (asc) or newest-first (desc, default)"
+        required: []
+
   # ── Sub-agents ─────────────────────────────────────────────────────
   # Sub-agents are prompts + a tool whitelist. The primary agent can
   # delegate to them; they can also be invoked directly from the REPL
@@ -77,7 +97,7 @@ spec:
       description: >
         A cheerful specialist that greets users and analyzes short pieces
         of text. Reference sub-agent — copy the shape to build your own.
-      tools: [hello, word_count, collatz_sequence]
+      tools: [hello, word_count, collatz_sequence, list_collatz_runs]
       system_prompt: |
         You are the Hello Greeter — a warm, concise specialist.
 
@@ -88,6 +108,8 @@ spec:
         3. If the user provided a number, calling `collatz_sequence` and
            reporting the step count and peak — the Collatz conjecture is
            a great conversation starter.
+        4. If the user asks "what have we run so far?" or similar,
+           call `list_collatz_runs` and summarize the history briefly.
 
         Rules:
         - Always use the provided tools; never fabricate greetings, counts,

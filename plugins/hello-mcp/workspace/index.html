@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Palette Studio</title>
+<style>
+:root{--bg:#FFFDF7;--panel:#fff;--border:rgba(27,27,27,.10);--fg:#1B1B1B;--muted:rgba(27,27,27,.55);--brand:#0891B2;--ok:#047857;--err:#B91C1C;--mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.55 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;padding:24px}
+h1{font-size:20px;margin:0 0 4px}
+p.lede{color:var(--muted);margin:0 0 24px;max-width:640px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px}
+h2{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--brand);margin:0 0 10px}
+.row{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px}
+label{display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted);flex:1;min-width:0}
+input,select{border:1px solid var(--border);border-radius:6px;padding:6px 8px;font:13px var(--mono);background:#fff;color:var(--fg)}
+input:focus,select:focus{outline:1px solid var(--brand);border-color:var(--brand)}
+button{border:0;background:var(--fg);color:#fff;border-radius:6px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer}
+button:hover{background:#333}
+button.ghost{background:transparent;color:var(--fg);border:1px solid var(--border)}
+button.ghost:hover{background:#F7F5EF}
+.swatches{display:flex;gap:6px;margin-top:8px}
+.sw{flex:1;height:56px;border-radius:6px;border:1px solid var(--border);position:relative}
+.sw code{position:absolute;bottom:4px;left:4px;font:10px var(--mono);background:rgba(255,255,255,.85);padding:1px 4px;border-radius:3px;color:#1B1B1B}
+.desc{font:11px var(--mono);color:var(--muted);margin-top:6px}
+.status{font-size:11px;color:var(--muted);margin-top:6px}
+.status.ok{color:var(--ok)} .status.err{color:var(--err)}
+.plist{margin-top:8px;display:flex;flex-direction:column;gap:8px;max-height:340px;overflow:auto}
+.prow{padding:8px;border:1px solid var(--border);border-radius:6px}
+.pmeta{font:10px var(--mono);color:var(--muted);margin-bottom:4px;display:flex;justify-content:space-between}
+footer{margin-top:24px;font-size:11px;color:var(--muted)}
+footer code{background:#F7F5EF;padding:1px 5px;border-radius:3px;font-family:var(--mono)}
+</style>
+</head>
+<body>
+<h1>Palette Studio <span id="live" style="font-size:11px;color:var(--muted);font-weight:400">· connecting…</span></h1>
+<p class="lede">A plugin whose <em>math</em> lives in a bundled MCP server, whose <em>state</em> lives in the plugin's SQLite blackboard, and whose <em>UX</em> is this page. Every tool call — click or agent — hits the same store. Ask the agent <em>"design 3 palettes seeded from #0891B2, #F97316, and #7C3AED"</em> and watch the saved list light up.</p>
+
+<div class="grid">
+
+  <div class="card">
+    <h2>Describe + generate (MCP)</h2>
+    <div class="row">
+      <label>seed hex<input id="seed" value="#0891B2"></label>
+      <label>mode<select id="mode"><option>analogous</option><option>complementary</option><option>triadic</option></select></label>
+      <button id="go">Generate</button>
+    </div>
+    <div id="descOut" class="desc"></div>
+    <div id="swatches" class="swatches"></div>
+    <div class="row" style="margin-top:12px">
+      <label style="flex:1">name<input id="pname" placeholder="e.g. Ocean at Dawn"></label>
+      <button class="ghost" id="save" disabled>Save</button>
+    </div>
+    <div id="status" class="status"></div>
+  </div>
+
+  <div class="card">
+    <h2>Saved palettes (Shared Blackboard)</h2>
+    <div class="row">
+      <button class="ghost" id="reload">Reload</button>
+      <button class="ghost" id="clear">Clear all</button>
+      <span id="listStatus" class="status"></span>
+    </div>
+    <div id="plist" class="plist"></div>
+  </div>
+
+</div>
+
+<footer>
+  Plugin: <code>hello-mcp</code> · MCP server: <code>palette</code> (stdio) · JS tools: <code>save_palette</code>, <code>list_palettes</code> · sub-agent: <code>palette-designer</code> · state: <code>~/.bahulam/data/hello-mcp/state.db</code>
+</footer>
+
+<script>
+const PLUGIN = 'hello-mcp';
+const token = new URLSearchParams(location.search).get('token') || '';
+const headers = { 'Content-Type': 'application/json', 'X-Bahulam-Local-Token': token };
+
+async function tool(name, args) {
+  const res = await fetch('/api/tools/execute', { method: 'POST', headers, body: JSON.stringify({ name, args }) });
+  const body = await res.json();
+  if (!res.ok || body.ok === false) throw new Error(body.error || body.message || 'failed');
+  const r = body.result;
+  if (r?.success === false) throw new Error(String(r.output));
+  return r?.output ?? r;
+}
+async function state(op, extra = {}) {
+  const res = await fetch('/api/plugin-state/' + PLUGIN, { method: 'POST', headers, body: JSON.stringify({ op, ...extra }) });
+  const body = await res.json();
+  if (!res.ok || body.ok === false) throw new Error(body.error || body.message);
+  return body.result;
+}
+
+let current = null;   // last generated palette; enables Save
+const $ = id => document.getElementById(id);
+
+$('go').addEventListener('click', async () => {
+  $('status').className = 'status'; $('status').textContent = '...';
+  $('swatches').innerHTML = ''; $('descOut').textContent = ''; $('save').disabled = true; current = null;
+  try {
+    const seed = $('seed').value.trim();
+    const mode = $('mode').value;
+    // MCP tool: describe_color — namespaced as `palette.describe_color`.
+    const raw = await tool('palette.describe_color', { hex: seed });
+    // MCP text content comes back as a string; try to JSON-parse.
+    let desc; try { desc = JSON.parse(raw); } catch { desc = { raw }; }
+    $('descOut').innerHTML = `<b>${desc.hex}</b> · rgb(${desc.rgb?.r}, ${desc.rgb?.g}, ${desc.rgb?.b}) · hsl(${desc.hsl?.h}°, ${desc.hsl?.s}%, ${desc.hsl?.l}%) · L=${desc.luminance} · best-text=<b>${desc.best_text}</b> · WCAG ${desc.wcag} (${desc.contrast_ratio}:1)`;
+
+    // MCP tool: palette_from
+    const raw2 = await tool('palette.palette_from', { hex: seed, mode });
+    let pal; try { pal = JSON.parse(raw2); } catch { pal = { swatches: [] }; }
+    current = { seed: pal.seed || seed, mode: pal.mode || mode, swatches: pal.swatches || [] };
+    $('swatches').innerHTML = current.swatches.map(hex => `<div class="sw" style="background:${hex}"><code>${hex}</code></div>`).join('');
+    $('save').disabled = current.swatches.length === 0;
+    $('status').className = 'status ok'; $('status').textContent = 'generated';
+  } catch (err) {
+    $('status').className = 'status err'; $('status').textContent = err.message;
+  }
+});
+
+$('save').addEventListener('click', async () => {
+  if (!current) return;
+  const name = ($('pname').value || 'untitled').trim();
+  try {
+    // JS tool: save_palette (writes to state.db → fires SSE)
+    const saved = await tool('save_palette', { name, ...current });
+    $('status').className = 'status ok'; $('status').textContent = 'saved #' + saved.id;
+    $('pname').value = ''; $('save').disabled = true; current = null;
+  } catch (err) {
+    $('status').className = 'status err'; $('status').textContent = err.message;
+  }
+});
+
+async function reload() {
+  const list = $('plist');
+  try {
+    const rows = await state('list', { stream: 'palettes', limit: 50, order: 'desc' });
+    if (!rows.length) { list.innerHTML = '<div class="status">no palettes yet — generate one, or ask the agent</div>'; return; }
+    list.innerHTML = rows.map(r => {
+      const p = r.payload || {};
+      const chips = (p.swatches || []).map(hex => `<div class="sw" style="background:${hex};height:36px"><code>${hex}</code></div>`).join('');
+      return `<div class="prow">
+        <div class="pmeta"><span>#${r.id} · ${p.name || 'untitled'} · ${p.mode || ''}</span><span>${(r.created_at || '').replace('T', ' ').slice(0, 19)}</span></div>
+        <div class="swatches">${chips}</div>
+      </div>`;
+    }).join('');
+  } catch (err) {
+    list.innerHTML = `<div class="status err">${err.message}</div>`;
+  }
+}
+$('reload').addEventListener('click', reload);
+$('clear').addEventListener('click', async () => {
+  if (!confirm('Delete every saved palette for this plugin?')) return;
+  try {
+    await state('query', { sql: "DELETE FROM records WHERE stream = ?", params: ['palettes'] });
+    await reload();
+  } catch (err) { $('listStatus').className = 'status err'; $('listStatus').textContent = err.message; }
+});
+
+// Reactive pulse — same pattern as hello-world, filter on this plugin's stream.
+let _t = null;
+const scheduleReload = () => { clearTimeout(_t); _t = setTimeout(reload, 200); };
+try {
+  const es = new EventSource('/api/events?token=' + encodeURIComponent(token));
+  es.addEventListener('open',  () => { $('live').textContent = '· live'; });
+  es.addEventListener('error', () => { $('live').textContent = '· reconnecting…'; });
+  es.addEventListener('plugin_state_changed', (ev) => {
+    let evt = {}; try { evt = JSON.parse(ev.data || '{}'); } catch {}
+    if (evt.plugin === PLUGIN && ((evt.kind === 'records' && evt.target === 'palettes') || (evt.kind === 'kv' && evt.target === '*'))) {
+      scheduleReload();
+    }
+  });
+} catch { /* SSE unsupported — reload button still works */ }
+
+reload();
+</script>
+</body>
+</html>

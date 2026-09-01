@@ -1,0 +1,103 @@
+apiVersion: bahulam.plugin/1
+kind: Plugin
+metadata:
+  name: hello-mcp
+  version: 1.0.0
+  description: >
+    Reference plugin proving the Plugin=MCP+UX pattern end-to-end. One
+    MCP server (color tools, written in stdlib Node so the reference
+    works out of the box), one JS tool that writes to the Shared
+    Blackboard, one sub-agent that composes both, and a workspace view
+    that watches the state live.
+  author: BahulamAI
+  repository: https://github.com/BahulamAI/awesome-bahulam-plugins
+
+spec:
+  # ── MCP servers ─────────────────────────────────────────────────────
+  # Every plugin can declare mcpServers inline (this block) OR drop a
+  # sibling mcp.json in Claude-Desktop format. Both are merged; inline
+  # wins on name collision. Bahulam spawns each server when this plugin
+  # activates and tears it down when the workspace closes — the servers
+  # never pollute the user's global MCP list.
+  #
+  # A production plugin would use a real MCP server (uvx, npx, or a
+  # compiled binary). This example ships a stdlib-only Node server
+  # right in the plugin dir so the reference is 100% self-contained.
+  mcpServers:
+    palette:
+      command: node
+      args: ["./mcp-server/hex-color.mjs"]
+
+  # ── JS tools (Bahulam-native) ───────────────────────────────────────
+  # Tools that need tight state integration stay JS-native so
+  # `options.state` gives them the shared blackboard directly. Anything
+  # that just needs to compute in another language should be an MCP
+  # tool instead.
+  tools:
+    - name: save_palette
+      description: >
+        Persist a generated palette to the plugin's shared blackboard.
+        Called by the agent after palette_from returns something worth
+        keeping, or by the workspace view when the user clicks Save.
+      handler: ./tools/save-palette.mjs
+      parameters:
+        type: object
+        properties:
+          name:     { type: string, description: "Human-friendly name" }
+          seed:     { type: string, description: "The seed hex color" }
+          mode:     { type: string, enum: [analogous, complementary, triadic] }
+          swatches: { type: array, items: { type: string } }
+        required: [name, seed, mode, swatches]
+
+    - name: list_palettes
+      description: List every palette previously saved to the shared blackboard
+      handler: ./tools/list-palettes.mjs
+      parameters:
+        type: object
+        properties:
+          limit: { type: integer }
+        required: []
+
+  # ── Sub-agents that WEAVE MCP tools with JS tools ───────────────────
+  # Notice how the agent's tools list mixes:
+  #   palette.describe_color, palette.palette_from  → MCP tools (namespaced <server>.<tool>)
+  #   save_palette, list_palettes                   → this plugin's JS tools
+  #   read_file                                     → built-in
+  agents:
+    - slug: palette-designer
+      name: Palette Designer
+      role: specialist
+      description: >
+        Designs and saves color palettes. Calls the palette MCP server
+        for the math, this plugin's save_palette for persistence.
+      tools:
+        - palette.describe_color
+        - palette.palette_from
+        - save_palette
+        - list_palettes
+      system_prompt: |
+        You are a palette designer.
+
+        When the user gives you a seed color or vibe:
+        1. Call `palette.describe_color` on the seed to understand it
+           (contrast, luminance, best text color).
+        2. Call `palette.palette_from` to generate a 5-swatch palette.
+           Default `mode` to "analogous"; use "complementary" for
+           high-contrast product UIs, "triadic" for playful/creative
+           surfaces.
+        3. Call `save_palette` to persist the result — a name, the
+           seed, the mode, and the swatches. This is what makes the
+           blackboard useful: the human sees it appear in the
+           workspace view instantly.
+
+        When asked "what have we saved so far?", call `list_palettes`
+        and summarize briefly.
+
+        Never fabricate hex codes; always use the MCP tools.
+
+  # ── Workspace view (the human's side of the blackboard) ─────────────
+  workspace:
+    views:
+      - type: panel
+        name: Palette Studio
+        source: ./workspace/index.html
