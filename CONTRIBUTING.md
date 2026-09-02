@@ -18,7 +18,7 @@ subdirectory contributions under `plugins/`. Include:
 - `plugin.yaml` (manifest)
 - `README.md` (one example per tool + screenshots)
 - `LICENSE` (or inherit the repo's MIT if you sign the CLA)
-- A `selftest.mjs` if your handlers have non-trivial logic
+- A `selftest.mjs` if your tool modules have non-trivial logic
 
 Use the `subdir` field in your `registry.json` entry so the CLI knows to
 install only your subdirectory.
@@ -26,14 +26,29 @@ install only your subdirectory.
 ## Manifest hygiene
 
 - `apiVersion: bahulam.plugin/1` is the only supported version
+- Everything lives under `spec:` — `spec.tools`, `spec.agents`,
+  `spec.workspace`, `spec.mcpServers`. Unknown keys are dropped.
+- Each tool entry points at its module with `tool: ./tools/<name>.mjs`
+  (the legacy `handler:` key is not accepted)
 - Tool names: `^[A-Za-z_][A-Za-z0-9_-]{0,63}$`, must not shadow built-ins
-- Handlers must be pure ESM (`.mjs`), no CommonJS
-- Every handler MUST return `{ success: boolean, output: any }` and honor
-  `options.signal` for long-running work
+- Tool modules must be pure ESM (`.mjs`), no CommonJS
+- Every tool module MUST export `async call(args, options)` returning
+  `{ success: boolean, output: any }` and honor `options.signal` for
+  long-running work
+
+## Workspace views
+
+- Views are sandboxed iframes; call tools via `POST /api/tools/execute`
+  and read state via `POST /api/plugin-state/<plugin>`
+- Subscribe to `/api/events` and re-render on `plugin_state_changed`.
+  Handle your precise `{kind, target}` events AND the coarse
+  `{kind: '*'}` pulse — the server emits it when another process (the
+  terminal agent, a headless run) writes your state. A view that renders
+  once at mount will be rejected: the panel is a live shared canvas.
 
 ## Security policy
 
-- **Never** ship credentials in a handler, manifest, or view
+- **Never** ship credentials in a tool module, manifest, or view
 - **Never** exec `curl | sh`, `bash -c`, or anything that fetches remote code
 - If your plugin needs network access, document the endpoints in your README
 - If your plugin needs a secret, read it from a documented env var — do not

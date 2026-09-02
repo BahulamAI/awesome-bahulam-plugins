@@ -64,10 +64,10 @@ Fields:
 **Review checklist:**
 
 - [ ] `plugin.yaml` at the repo (or `subdir`) root, `apiVersion: bahulam.plugin/1`
-- [ ] Every tool declared has a working handler
+- [ ] Every tool declared has a working module at its `tool:` path
 - [ ] `LICENSE` present (MIT / Apache-2.0 preferred)
 - [ ] A `selftest.mjs` or equivalent proves core logic runs offline
-- [ ] No secrets, `curl | sh`, or credential prompts in handlers
+- [ ] No secrets, `curl | sh`, or credential prompts in tool modules
 - [ ] README shows one working example per tool + screenshots of any view
 
 ---

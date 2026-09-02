@@ -12,16 +12,17 @@ metadata:
 
 spec:
   # ── Tools ──────────────────────────────────────────────────────────
-  # Each tool is a client-side handler under ./tools/. The `parameters`
-  # block below is a JSON Schema; the model sees this and calls the tool
-  # with matching arguments. The handler runs in your CLI process.
+  # Each tool is a client-side module under ./tools/ (the `tool:` key
+  # points at it). The `parameters` block below is a JSON Schema; the
+  # model sees this and calls the tool with matching arguments. The
+  # module runs in your CLI process and must export async call().
   tools:
     - name: hello
       description: >
         Return a friendly greeting. The simplest possible tool — takes a
         name, returns a message. Use this as the template for your own
         parameter-in / value-out helpers.
-      handler: ./tools/hello.mjs
+      tool: ./tools/hello.mjs
       parameters:
         type: object
         properties:
@@ -38,7 +39,7 @@ spec:
         Count words, characters, sentences, and paragraphs in a piece of
         text. Demonstrates returning a structured object the agent can
         reason about.
-      handler: ./tools/word-count.mjs
+      tool: ./tools/word-count.mjs
       parameters:
         type: object
         properties:
@@ -55,7 +56,7 @@ spec:
         Every run is persisted to the plugin's Shared Blackboard so the
         workspace view (and future calls to list_collatz_runs) can see
         history. A hard step cap prevents runaway inputs.
-      handler: ./tools/collatz.mjs
+      tool: ./tools/collatz.mjs
       parameters:
         type: object
         properties:
@@ -73,7 +74,7 @@ spec:
         Demonstrates the READ side of persistent plugin state — anything
         the agent OR the human panel has run through collatz_sequence
         shows up here.
-      handler: ./tools/list-collatz-runs.mjs
+      tool: ./tools/list-collatz-runs.mjs
       parameters:
         type: object
         properties:

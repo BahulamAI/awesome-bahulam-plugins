@@ -166,7 +166,13 @@ try {
   es.addEventListener('error', () => { $('live').textContent = '· reconnecting…'; });
   es.addEventListener('plugin_state_changed', (ev) => {
     let evt = {}; try { evt = JSON.parse(ev.data || '{}'); } catch {}
-    if (evt.plugin === PLUGIN && ((evt.kind === 'records' && evt.target === 'palettes') || (evt.kind === 'kv' && evt.target === '*'))) {
+    if (evt.plugin !== PLUGIN) return;
+    // Precise events from in-process writes, PLUS the coarse kind:'*'
+    // pulse the server emits when another process (terminal agent,
+    // headless run) writes our state.db — re-query on either.
+    if ((evt.kind === 'records' && evt.target === 'palettes')
+        || (evt.kind === 'kv' && evt.target === '*')
+        || evt.kind === '*') {
       scheduleReload();
     }
   });

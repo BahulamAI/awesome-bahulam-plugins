@@ -10,10 +10,11 @@ hello-world/
 ├── tools/
 │   ├── hello.mjs                # a synchronous, one-arg tool
 │   ├── word-count.mjs           # structured output, input validation
-│   └── collatz.mjs              # pure math trick, bounded work, chartable output
+│   ├── collatz.mjs              # pure math trick, bounded work, chartable output
+│   └── list-collatz-runs.mjs    # reads the Shared Blackboard history
 ├── workspace/
-│   └── index.html               # a panel that calls the tools live
-├── selftest.mjs                 # `node selftest.mjs` to smoke-test handlers
+│   └── index.html               # a live panel — re-renders on every state write
+├── selftest.mjs                 # `node selftest.mjs` to smoke-test the tool modules
 └── README.md
 ```
 
@@ -36,13 +37,15 @@ bahulam plugin hello-world .
 Opens a workspace with the "Hello World" tab in the central panel. Every
 button in the tab calls a plugin tool.
 
-Or invoke the sub-agent from any REPL:
+Or invoke the sub-agent from the REPL (enable the plugin for the
+project first — installed plugins are visible but inactive until
+enabled):
 
 ```
 > /run hello-greeter Ravi
 ```
 
-## Test the handlers offline
+## Test the tool modules offline
 
 ```bash
 node plugins/hello-world/selftest.mjs

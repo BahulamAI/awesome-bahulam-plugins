@@ -1,0 +1,133 @@
+apiVersion: bahulam.plugin/1
+kind: Plugin
+metadata:
+  name: manim-studio
+  version: 0.1.0
+  description: >
+    Text-to-video animation studio. The animator agent writes Manim CE
+    scenes from plain-language briefs, renders run as background jobs
+    (the agent keeps working while ffmpeg grinds), a reviewer agent wakes
+    on completion to verify or fix, and the workspace gallery updates
+    live as each video lands. Requires python3 + manim + ffmpeg locally
+    (see README).
+  author: BahulamAI
+  repository: https://github.com/BahulamAI/awesome-bahulam-plugins
+
+spec:
+  tools:
+    - name: save_scene
+      description: >
+        Save a Manim CE scene script to the project's render workspace and
+        get back the exact background-render command. Call this with the
+        full Python source of ONE scene class, then start the render with
+        shell run_in_background using the returned command.
+      tool: ./tools/save-scene.mjs
+      parameters:
+        type: object
+        properties:
+          name:
+            type: string
+            description: "Slug for this scene (e.g. compound-interest). Used for file and video names."
+          scene_class:
+            type: string
+            description: "The Python class name of the Scene (e.g. CompoundInterest)."
+          code:
+            type: string
+            description: "Complete Manim CE Python source. Must define exactly the scene_class given."
+          quality:
+            type: string
+            enum: [l, m, h]
+            description: "Render quality: l=480p (fast drafts), m=720p (default), h=1080p."
+        required: [name, scene_class, code]
+
+    - name: register_render
+      description: >
+        Record a completed (or failed) render on the plugin's shared
+        blackboard — the workspace gallery lists renders from here. The
+        render-reviewer calls this after inspecting a finished job.
+      tool: ./tools/register-render.mjs
+      parameters:
+        type: object
+        properties:
+          name:         { type: string, description: "Scene slug" }
+          scene_class:  { type: string }
+          status:       { type: string, enum: [completed, failed, fixed_and_rerendered] }
+          video_path:   { type: string, description: "Path to the rendered .mp4 (empty when failed)" }
+          duration_s:   { type: number, description: "Render wall-clock seconds" }
+          notes:        { type: string, description: "Reviewer verdict — one or two lines" }
+        required: [name, status]
+
+    - name: list_renders
+      description: List saved scenes and completed/failed renders from the shared blackboard, newest first.
+      tool: ./tools/list-renders.mjs
+      parameters:
+        type: object
+        properties:
+          limit: { type: integer, description: "Max rows (default 20)" }
+        required: []
+
+  agents:
+    - slug: animator
+      name: Manim Animator
+      role: specialist
+      description: >
+        Writes Manim Community Edition scenes from plain-language briefs
+        and drives background renders. Delegate any "make an animation /
+        explainer video of X" task here.
+      tools: [save_scene, list_renders, shell, job_output, read_file]
+      system_prompt: |
+        You are the Manim Animator — you turn plain-language briefs into
+        rendered videos using Manim Community Edition.
+
+        Workflow for every scene:
+        1. Write ONE complete Manim CE scene: a single class extending
+           Scene with a construct() method. Target 15-30 seconds of
+           animation. Prefer Text/MathTex, simple shapes, and smooth
+           Transform/Create/FadeIn animations. Never use external assets.
+        2. Call save_scene with the slug, class name, and full source.
+        3. Start the render in the BACKGROUND with the returned command:
+           shell { run_in_background: true, on_complete_agent: "render-reviewer",
+                   command: <render_command from save_scene> }
+           Do NOT wait for it — move on to the next scene or task.
+        4. If asked for multiple scenes, save and launch each render
+           before any of them finish. Check overall progress with
+           job_output only when you have nothing left to write.
+
+        Rules:
+        - Manim CE syntax only (from manim import *). No ManimGL.
+        - One scene class per file; class name must match save_scene's
+          scene_class exactly.
+        - Keep total objects per scene under ~20 so draft renders stay fast.
+        - self.wait() at the end of every scene.
+
+    - slug: render-reviewer
+      name: Render Reviewer
+      role: reviewer
+      description: >
+        Woken when a background render finishes. Verifies the output,
+        records the result on the blackboard, and fixes failed scenes.
+      tools: [job_output, register_render, list_renders, read_file, save_scene, shell]
+      system_prompt: |
+        You are the Render Reviewer. You are invoked when a Manim render
+        job completes — the job's status, exit code, and log tail are in
+        your task.
+
+        If the render SUCCEEDED (exit 0):
+        1. Find the output video path in the log (media/videos/.../<Class>.mp4).
+        2. register_render with status "completed", the video path, the
+           render duration, and a one-line note.
+
+        If the render FAILED:
+        1. Read the error from the log tail (Manim errors are usually a
+           Python traceback naming the bad line).
+        2. Fix the scene source: call save_scene again with the corrected
+           code (same slug), then relaunch with
+           shell { run_in_background: true, on_complete_agent: "render-reviewer", command: <render_command> }.
+        3. register_render with status "failed" and a note saying what
+           you fixed. Never retry more than twice for the same slug.
+
+  workspace:
+    views:
+      - type: panel
+        name: Manim Studio
+        source: ./workspace/studio.html

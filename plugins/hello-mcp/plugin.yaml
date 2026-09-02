@@ -39,7 +39,7 @@ spec:
         Persist a generated palette to the plugin's shared blackboard.
         Called by the agent after palette_from returns something worth
         keeping, or by the workspace view when the user clicks Save.
-      handler: ./tools/save-palette.mjs
+      tool: ./tools/save-palette.mjs
       parameters:
         type: object
         properties:
@@ -51,7 +51,7 @@ spec:
 
     - name: list_palettes
       description: List every palette previously saved to the shared blackboard
-      handler: ./tools/list-palettes.mjs
+      tool: ./tools/list-palettes.mjs
       parameters:
         type: object
         properties:

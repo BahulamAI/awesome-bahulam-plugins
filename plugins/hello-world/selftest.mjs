@@ -1,5 +1,5 @@
 /**
- * Offline smoke test for the hello-world plugin handlers.
+ * Offline smoke test for the hello-world plugin tool modules.
  * Run: node plugins/hello-world/selftest.mjs
  */
 

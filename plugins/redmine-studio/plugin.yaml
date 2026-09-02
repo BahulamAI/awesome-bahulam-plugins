@@ -1,0 +1,137 @@
+apiVersion: bahulam.plugin/1
+kind: Plugin
+metadata:
+  name: redmine-studio
+  version: 0.1.0
+  description: >
+    Redmine ops Studio — a Bahulam pack that composes pi-redmine's REST
+    tools with our own state layer and a live workspace panel. The agent
+    triages, snapshots, and updates tickets; the panel re-renders every
+    time state changes, whether the write came from the agent or the
+    human clicking the panel.
+  author: BahulamAI
+  repository: https://github.com/BahulamAI/awesome-bahulam-plugins
+
+spec:
+  # Native tools — the persistent-state layer over pi-redmine's stateless API.
+  # Every snapshot lands in the shared blackboard so the workspace panel and
+  # future agent turns can see it. This is exactly the persistent-state
+  # binding differentiator (PRD-101 §0.4): pi-redmine returns issue JSON,
+  # we persist and re-serve it, the panel binds to the store.
+  tools:
+    - name: save_issue_snapshot
+      description: >
+        Persist an issue snapshot (id, subject, status, priority, assignee)
+        to the studio's blackboard so the workspace panel shows it and
+        future turns can recall it without another API call.
+      tool: ./tools/save-issue-snapshot.mjs
+      parameters:
+        type: object
+        properties:
+          id:       { type: integer, description: Redmine issue id }
+          subject:  { type: string }
+          status:   { type: string }
+          priority: { type: string }
+          assignee: { type: string }
+          project:  { type: string }
+          notes:    { type: string, description: "Analyst's short note (why we're tracking this)" }
+        required: [id, subject]
+
+    - name: list_snapshots
+      description: >
+        Read persisted issue snapshots from the blackboard. Use this
+        first when the user asks about tickets we've discussed — cheaper
+        than re-querying Redmine, and reflects the human's panel writes too.
+      tool: ./tools/list-snapshots.mjs
+      parameters:
+        type: object
+        properties:
+          limit: { type: integer, description: "Max rows, default 25" }
+        required: []
+
+    - name: drop_snapshot
+      description: Remove a persisted issue snapshot by id.
+      tool: ./tools/drop-snapshot.mjs
+      parameters:
+        type: object
+        properties:
+          id: { type: integer, description: Redmine issue id }
+        required: [id]
+
+  # Composed pi tools. All 11 pi-redmine tools available, namespaced under
+  # `redmine.*`. Verified=true because we've vetted pi-redmine as the
+  # canonical Redmine wrapper for this Studio.
+  composes:
+    - source: pi:pi-redmine@^0.2.0
+      as: redmine
+      expose:
+        - redmine_list_projects
+        - redmine_get_project
+        - redmine_list_issues
+        - redmine_get_issue
+        - redmine_create_issue
+        - redmine_update_issue
+        - redmine_list_time_entries
+        - redmine_log_time
+        - redmine_get_wiki_page
+        - redmine_update_wiki_page
+        - redmine_search
+      verified: true
+
+  agents:
+    - slug: redmine-analyst
+      name: Redmine Analyst
+      role: specialist
+      description: >
+        Triages, snapshots, and updates Redmine tickets. Uses the studio's
+        blackboard to remember tickets across turns and to keep the
+        workspace panel in sync.
+      tools:
+        # Native (persistent state)
+        - save_issue_snapshot
+        - list_snapshots
+        - drop_snapshot
+        # Composed pi-redmine (Redmine REST)
+        - redmine.redmine_list_projects
+        - redmine.redmine_get_project
+        - redmine.redmine_list_issues
+        - redmine.redmine_get_issue
+        - redmine.redmine_create_issue
+        - redmine.redmine_update_issue
+        - redmine.redmine_list_time_entries
+        - redmine.redmine_log_time
+        - redmine.redmine_get_wiki_page
+        - redmine.redmine_update_wiki_page
+        - redmine.redmine_search
+      system_prompt: |
+        You are the Redmine Analyst. You have two toolsets:
+
+        1. **Redmine tools (`redmine.*`)** — call the Redmine REST API to
+           list projects, search issues, fetch details, create/update
+           tickets, log time, read/write wiki pages.
+
+        2. **Studio state tools** — `save_issue_snapshot`, `list_snapshots`,
+           `drop_snapshot` — persist important tickets to the studio's
+           blackboard. The workspace panel shows this list live; every
+           snapshot you save appears there without refresh.
+
+        Workflow rules:
+        - When the user asks "what tickets are we tracking?" or similar,
+          call `list_snapshots` FIRST (fast, local) before re-querying
+          Redmine. Only re-query Redmine if the snapshot is stale or the
+          user asks explicitly.
+        - When you fetch an issue via `redmine.redmine_get_issue`, if it
+          looks important (open bug, blocker, assigned to user, or the
+          user says "watch this"), also call `save_issue_snapshot` so the
+          human panel and future turns can see it.
+        - Mutating tools (`create_issue`, `update_issue`, `log_time`,
+          `update_wiki_page`, `drop_snapshot`) require the user's explicit
+          confirmation. Read tools you can call proactively.
+        - Prefer short, structured answers with issue links formatted as
+          `#<id>: <subject> [<status>]`.
+
+  workspace:
+    views:
+      - type: panel
+        name: Redmine Studio
+        source: ./workspace/studio.html

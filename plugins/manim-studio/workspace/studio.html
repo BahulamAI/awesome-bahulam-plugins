@@ -1,0 +1,96 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Manim Studio</title>
+<style>
+  :root { --bg:#FBFAF7; --fg:#1F2328; --muted:#8A8F98; --ok:#1A7F37; --err:#C0392B; --brand:#0891B2; --mono:ui-monospace,Menlo,monospace; }
+  body { margin:0; padding:20px 24px; background:var(--bg); color:var(--fg); font:14px/1.5 -apple-system,system-ui,sans-serif; }
+  h1 { font-size:17px; margin:0 0 2px; } .lede { color:var(--muted); font-size:12px; margin:0 0 18px; }
+  table { width:100%; border-collapse:collapse; font-size:12px; }
+  th { text-align:left; padding:6px 8px; color:var(--muted); font-weight:600; border-bottom:2px solid #E8E6E0; }
+  td { padding:6px 8px; border-bottom:1px solid #F0EFEA; vertical-align:top; }
+  .mono { font-family:var(--mono); font-size:11px; }
+  .ok { color:var(--ok); } .err { color:var(--err); } .muted { color:var(--muted); }
+  #live { color:var(--muted); font-size:11px; }
+  .path { word-break:break-all; }
+</style>
+</head>
+<body>
+<h1>Manim Studio <span id="live">· connecting…</span></h1>
+<p class="lede">Every render the animator launches lands here the moment ffmpeg
+exits — even when the agent ran in the terminal. Videos live under
+<span class="mono">.bahulam/tmp/manim/media/</span>; open them with your
+player, or ask the agent to <i>"play the latest render"</i>.</p>
+
+<table>
+  <thead><tr><th></th><th>scene</th><th>class</th><th>render</th><th>video</th><th>notes</th><th>at</th></tr></thead>
+  <tbody id="rows"><tr><td colspan="7" class="muted" style="padding:14px">loading…</td></tr></tbody>
+</table>
+
+<script>
+const token = new URLSearchParams(location.search).get('token') || '';
+const PLUGIN = 'manim-studio';
+
+async function state(op, extra = {}) {
+  const res = await fetch('/api/plugin-state/' + PLUGIN, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Bahulam-Local-Token': token },
+    body: JSON.stringify({ op, ...extra }),
+  });
+  const body = await res.json();
+  if (!res.ok || body.ok === false) throw new Error(body.error || 'state op failed');
+  return body.result;
+}
+
+function fmtTime(iso) { return (iso || '').replace('T', ' ').slice(0, 19); }
+
+async function reload() {
+  const tbody = document.getElementById('rows');
+  try {
+    const rows = await state('list', { stream: 'renders', limit: 100, order: 'desc' });
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="7" class="muted" style="padding:14px">no renders yet — ask the agent for an animation</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(r => {
+      const p = r.payload || {};
+      const mark = p.status === 'completed' ? '<span class="ok">✓</span>'
+                 : p.status === 'failed' ? '<span class="err">✗</span>' : '↻';
+      return `<tr>
+        <td>${mark}</td>
+        <td class="mono">${p.name || ''}</td>
+        <td class="mono muted">${p.scene_class || ''}</td>
+        <td class="muted">${p.status || ''}${p.duration_s ? ' · ' + p.duration_s + 's' : ''}</td>
+        <td class="mono path muted">${p.video_path || ''}</td>
+        <td>${p.notes || ''}</td>
+        <td class="mono muted">${fmtTime(r.created_at)}</td>
+      </tr>`;
+    }).join('');
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="7" class="err" style="padding:14px">${err.message}</td></tr>`;
+  }
+}
+
+// Reactive shared canvas: precise events from in-process writes, plus the
+// coarse kind:'*' pulse the server emits when ANOTHER process (the
+// terminal animator/reviewer, a headless run) writes our state.db.
+let _t = null;
+const scheduleReload = () => { clearTimeout(_t); _t = setTimeout(reload, 200); };
+try {
+  const es = new EventSource('/api/events?token=' + encodeURIComponent(token));
+  es.addEventListener('open',  () => { document.getElementById('live').textContent = '· live'; });
+  es.addEventListener('error', () => { document.getElementById('live').textContent = '· reconnecting…'; });
+  es.addEventListener('plugin_state_changed', (ev) => {
+    let evt = {}; try { evt = JSON.parse(ev.data || '{}'); } catch { /* ignore */ }
+    if (evt.plugin !== PLUGIN) return;
+    if ((evt.kind === 'records') || (evt.kind === 'kv' && evt.target === '*') || evt.kind === '*') {
+      scheduleReload();
+    }
+  });
+} catch { /* SSE unsupported — table stays load-only */ }
+
+reload();
+</script>
+</body>
+</html>

@@ -279,10 +279,16 @@ try {
   es.addEventListener('error', () => { document.getElementById('hLive').textContent = '· reconnecting…'; });
   es.addEventListener('plugin_state_changed', (ev) => {
     let evt = {}; try { evt = JSON.parse(ev.data || '{}'); } catch { /* ignore */ }
-    if (evt.plugin === PLUGIN && evt.kind === 'records' && evt.target === 'collatz_runs') {
+    if (evt.plugin !== PLUGIN) return;
+    if (evt.kind === 'records' && evt.target === 'collatz_runs') {
       scheduleReload();
-    } else if (evt.plugin === PLUGIN && evt.kind === 'kv' && evt.target === '*') {
+    } else if (evt.kind === 'kv' && evt.target === '*') {
       // A query() DML update — could be our own DELETE or something else.
+      scheduleReload();
+    } else if (evt.kind === '*') {
+      // Coarse pulse from the server's state-file watcher: some OTHER
+      // process (terminal agent, headless run, graph job) wrote our
+      // state.db. We don't know what changed — re-query everything.
       scheduleReload();
     }
   });

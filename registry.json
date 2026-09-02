@@ -2,6 +2,15 @@
   "$schema": "https://docs.bahulam.ai/schemas/plugin-registry-1.json",
   "plugins": [
     {
+      "name": "manim-studio",
+      "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
+      "ref": "main",
+      "subdir": "plugins/manim-studio",
+      "description": "Text-to-video animation studio — agent-written Manim scenes, background renders with wake-on-finish review, live gallery",
+      "author": "BahulamAI",
+      "tags": ["showcase", "video", "manim", "education"]
+    },
+    {
       "name": "hello-world",
       "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
       "ref": "main",
