@@ -15,11 +15,15 @@
 
 ---
 
-A **plugin** bundles tools, sub-agents, and a live workspace panel into a single directory. Install any of them with one command:
+A **plugin** bundles tools, sub-agents, and a live workspace panel into a single directory.
 
-```bash
-bahulam plugin install <name>
-```
+Two ways to get one:
+
+- **Hand-authored packs** (this repo) — install by name or from a URL:
+  `bahulam plugin install <name>`
+- **[pi](https://www.npmjs.com/search?q=pi-) ecosystem** — any `pi:<npm-package>`
+  scaffolds a full pack in one command with state layer + workspace + agent:
+  `bahulam install pi:pi-redmine`
 
 ---
 
@@ -91,7 +95,8 @@ Composes [pi-redmine](https://www.npmjs.com/package/pi-redmine)'s 11 REST tools 
 - `plugin.yaml` — composes pi-redmine as ingredients
 
 ```bash
-bahulam plugin install redmine-studio
+bahulam plugin install redmine-studio        # hand-authored pack
+bahulam install pi:pi-redmine                # or scaffold from the pi ingredient
 ```
 
 </div>
@@ -119,14 +124,14 @@ bahulam plugin install research-studio
 ## ⚡ Quick Install
 
 ```bash
-# Install by name (requires registry entry)
-bahulam plugin install hello-world
+# —· Hand-authored packs (this repo) ·—
+bahulam plugin install hello-world          # install by registry name
+bahulam plugin install ./my-plugin          # from a local checkout
+bahulam plugin install https://github.com/… # from a git URL
 
-# Install from git URL (any repo with a plugin.yaml)
-bahulam plugin install https://github.com/BahulamAI/awesome-bahulam-plugins
-
-# Install from a local checkout
-bahulam plugin install ./my-plugin
+# —· pi ecosystem (auto-scaffolds a full pack) ·—
+bahulam install pi:pi-redmine                # one-command: pull + scaffold + install
+bahulam pull pi:pi-web-access                # 🧩 raw ingredient (composable, not directly runnable)
 ```
 
 Open a workspace to see the live panel:
