@@ -2,13 +2,13 @@
   "$schema": "https://docs.bahulam.ai/schemas/plugin-registry-1.json",
   "plugins": [
     {
-      "name": "manim-studio",
+      "name": "hello-mcp",
       "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
       "ref": "main",
-      "subdir": "plugins/manim-studio",
-      "description": "Text-to-video animation studio — agent-written Manim scenes, background renders with wake-on-finish review, live gallery",
+      "subdir": "plugins/hello-mcp",
+      "description": "Reference for Plugin = MCP + UX — a bundled MCP server, a JS state tool, a sub-agent that composes both, and a live workspace view",
       "author": "BahulamAI",
-      "tags": ["showcase", "video", "manim", "education"]
+      "tags": ["reference", "mcp", "starter"]
     },
     {
       "name": "hello-world",
@@ -20,13 +20,31 @@
       "tags": ["reference", "starter"]
     },
     {
-      "name": "hello-mcp",
+      "name": "manim-studio",
       "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
       "ref": "main",
-      "subdir": "plugins/hello-mcp",
-      "description": "Reference for Plugin = MCP + UX — a bundled MCP server, a JS state tool, a sub-agent that composes both, and a live workspace view",
+      "subdir": "plugins/manim-studio",
+      "description": "Text-to-video animation studio — agent-written Manim scenes, background renders with wake-on-finish review, live gallery",
       "author": "BahulamAI",
-      "tags": ["reference", "mcp", "starter"]
+      "tags": ["showcase", "video", "manim", "education"]
+    },
+    {
+      "name": "redmine-studio",
+      "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
+      "ref": "main",
+      "subdir": "plugins/redmine-studio",
+      "description": "Redmine ops Studio — triages, snapshots, and updates Redmine tickets via a persistent-state layer and live workspace panel",
+      "author": "BahulamAI",
+      "tags": ["showcase", "devops", "project-management"]
+    },
+    {
+      "name": "research-studio",
+      "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
+      "ref": "main",
+      "subdir": "plugins/research-studio",
+      "description": "Research findings notebook — persistent, turn-surviving notebook with web search and fetch tools",
+      "author": "BahulamAI",
+      "tags": ["reference", "research"]
     }
   ]
 }

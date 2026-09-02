@@ -25,97 +25,94 @@ bahulam plugin install <name>
 
 ## 🚀 Featured Plugins
 
-<table>
-<tr>
-<td width="50%" valign="top">
+<div style="display: flex; flex-wrap: wrap; gap: 24px; margin: 24px 0;">
 
-### <a href="./plugins/hello-world">hello-world</a>
-**Minimal reference plugin**
+<div style="flex: 1 1 calc(50% - 24px); min-width: 280px; border: 1px solid #e1e4e8; border-radius: 8px; padding: 20px; background: #f6f8fa;">
+
+### [hello-world](./plugins/hello-world)
+**Minimal reference plugin** · `reference` `starter`
 
 The starting point. One tool, one sub-agent, one workspace panel. Copy it and start building.
 
+- `tools/` — hello, word-count, collatz
+- `workspace/` — live panel with interactive buttons
+- `selftest.mjs` — smoke-test offline
+
+```bash
+bahulam plugin install hello-world
 ```
-hello-world/
-├── tools/        hello, word-count, collatz
-├── workspace/    live panel with interactive buttons
-└── selftest.mjs  smoke-test offline
-```
 
-`bahulam plugin install hello-world`
+</div>
 
-</td>
-<td width="50%" valign="top">
+<div style="flex: 1 1 calc(50% - 24px); min-width: 280px; border: 1px solid #e1e4e8; border-radius: 8px; padding: 20px; background: #f6f8fa;">
 
-### <a href="./plugins/hello-mcp">hello-mcp</a>
-**MCP + UX reference pattern**
+### [hello-mcp](./plugins/hello-mcp)
+**MCP + UX reference pattern** · `reference` `mcp` `starter`
 
 Bundles a stdio MCP server, JS state tools, a sub-agent that composes both, and a reactive workspace view. The blueprint for wrapping any MCP server as a Bahulam plugin.
 
+- `mcp-server/` — hex-color.mjs (zero-dep stdio server)
+- `tools/` — save-palette, list-palettes
+- `workspace/` — Palette Studio live UI
+- `selftest.mjs` — offline smoke test
+
+```bash
+bahulam plugin install hello-mcp
 ```
-hello-mcp/
-├── mcp-server/   hex-color.mjs (zero-dep stdio server)
-├── tools/        save-palette, list-palettes
-├── workspace/    Palette Studio live UI
-└── selftest.mjs
-```
 
-`bahulam plugin install hello-mcp`
+</div>
 
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
+<div style="flex: 1 1 calc(50% - 24px); min-width: 280px; border: 1px solid #e1e4e8; border-radius: 8px; padding: 20px; background: #f6f8fa;">
 
-### <a href="./plugins/manim-studio">manim-studio</a>
-**Text-to-video animation studio**
+### [manim-studio](./plugins/manim-studio)
+**Text-to-video animation studio** · `showcase` `video` `manim` `education`
 
 Describe a concept → the **animator** agent writes a Manim CE scene, launches a background render, and keeps working. The **render-reviewer** wakes on completion — verifies output, patches failures, re-renders. A live gallery updates as each video lands.
 
-```
-manim-studio/
-├── tools/        save-scene, register-render, list-renders
-├── workspace/    live render gallery
-└── selftest.mjs
-```
+- `tools/` — save-scene, register-render, list-renders
+- `workspace/` — live render gallery
+- `selftest.mjs` — offline smoke test
 
-`bahulam plugin install manim-studio`
-
-</td>
-<td width="50%" valign="top">
-
-### <a href="./plugins/redmine-studio">redmine-studio</a>
-**Redmine ops Studio**
-
-Composes <a href="https://www.npmjs.com/package/pi-redmine">pi-redmine</a>'s 11 REST tools with a persistent-state layer and a live workspace panel. The **redmine-analyst** agent handles the workflow — list projects, search issues, snapshot high-priority tickets.
-
-```
-redmine-studio/
-├── tools/        save-issue-snapshot, list/drop-snapshots
-├── workspace/    live issue tracker panel
-└── plugin.yaml   composes pi-redmine as ingredients
+```bash
+bahulam plugin install manim-studio
 ```
 
-`bahulam plugin install redmine-studio`
+</div>
 
-</td>
-</tr>
-<tr>
-<td colspan="2" valign="top">
+<div style="flex: 1 1 calc(50% - 24px); min-width: 280px; border: 1px solid #e1e4e8; border-radius: 8px; padding: 20px; background: #f6f8fa;">
 
-### <a href="./plugins/research-studio">research-studio</a>
-**Research findings notebook**
+### [redmine-studio](./plugins/redmine-studio)
+**Redmine ops Studio** · `showcase` `devops` `project-management`
+
+Composes [pi-redmine](https://www.npmjs.com/package/pi-redmine)'s 11 REST tools with a persistent-state layer and a live workspace panel. The **redmine-analyst** agent handles the workflow — list projects, search issues, snapshot high-priority tickets.
+
+- `tools/` — save-issue-snapshot, list/drop-snapshots
+- `workspace/` — live issue tracker panel
+- `plugin.yaml` — composes pi-redmine as ingredients
+
+```bash
+bahulam plugin install redmine-studio
+```
+
+</div>
+
+<div style="flex: 1 1 calc(50% - 24px); min-width: 280px; border: 1px solid #e1e4e8; border-radius: 8px; padding: 20px; background: #f6f8fa;">
+
+### [research-studio](./plugins/research-studio)
+**Research findings notebook** · `reference` `research`
 
 A persistent notebook that survives across turns. Save, list, and drop research findings — each persists to a shared blackboard and populates the workspace panel. Composes with the web search and fetch tools for citation-backed research.
 
-```
-research-studio/
-├── tools/        save-finding, list-findings, drop-finding
-└── workspace/    notebook panel
+- `tools/` — save-finding, list-findings, drop-finding
+- `workspace/` — notebook panel
+
+```bash
+bahulam plugin install research-studio
 ```
 
-</td>
-</tr>
-</table>
+</div>
+
+</div>
 
 ---
 
@@ -144,13 +141,38 @@ bahulam plugin hello-world .
 
 Every Bahulam plugin follows the same contract:
 
-| Layer | What it does | Example |
-|---|---|---|
-| **Tools** | `.mjs` modules the agent calls | `save-scene.mjs`, `hello.mjs` |
-| **Sub-agents** | Specialists that compose tools | `animator`, `render-reviewer` |
-| **Workspace** | Live HTML panels bound to state | `studio.html`, `index.html` |
-| **Shared Blackboard** | Cross-process state that agents and panels read/write | render gallery, issue snapshots |
-| **MCP servers** | Bundled stdio or remote servers | `hex-color.mjs`, pi-redmine |
+<table>
+<tr>
+<th>Layer</th>
+<th>What it does</th>
+<th>Example</th>
+</tr>
+<tr>
+<td><strong>Tools</strong></td>
+<td><code>.mjs</code> modules the agent calls</td>
+<td><code>save-scene.mjs</code>, <code>hello.mjs</code></td>
+</tr>
+<tr>
+<td><strong>Sub-agents</strong></td>
+<td>Specialists that compose tools</td>
+<td><code>animator</code>, <code>render-reviewer</code></td>
+</tr>
+<tr>
+<td><strong>Workspace</strong></td>
+<td>Live HTML panels bound to state</td>
+<td><code>studio.html</code>, <code>index.html</code></td>
+</tr>
+<tr>
+<td><strong>Shared Blackboard</strong></td>
+<td>Cross-process state that agents and panels read/write</td>
+<td>render gallery, issue snapshots</td>
+</tr>
+<tr>
+<td><strong>MCP servers</strong></td>
+<td>Bundled stdio or remote servers</td>
+<td><code>hex-color.mjs</code>, pi-redmine</td>
+</tr>
+</table>
 
 Plugins are composable — `redmine-studio` wraps `pi-redmine` as an ingredient and adds persistent state on top. See the [Plugin Authoring Guide](https://docs.bahulam.ai/plugins) for the full contract.
 
