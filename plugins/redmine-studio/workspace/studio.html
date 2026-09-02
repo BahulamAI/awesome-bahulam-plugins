@@ -69,7 +69,7 @@ async function tool(name, args = {}) {
   const res = await fetch('/api/tools/execute', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Bahulam-Local-Token': token },
-    body: JSON.stringify({ tool: name, args }),
+    body: JSON.stringify({ name, args }),
   });
   const body = await res.json();
   if (!res.ok || body.ok === false) throw new Error(body.error || 'tool call failed');
@@ -135,7 +135,7 @@ document.getElementById('btnFetch').addEventListener('click', async () => {
   setStatus(`fetching #${id}…`);
   try {
     // Composed pi tool: fetch full issue via Redmine REST
-    const r = await tool('redmine.redmine_get_issue', { id });
+    const r = await tool('redmine__redmine_get_issue', { id });
     // Pi tools return the raw REST payload in output. Extract fields we care about.
     const payload = typeof r?.output === 'string' ? tryJson(r.output) : r?.output;
     const issue = payload?.issue || payload || {};

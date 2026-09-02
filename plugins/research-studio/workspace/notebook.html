@@ -1,0 +1,139 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Research Notebook</title>
+<style>
+  :root { --bg:#FBFAF7; --fg:#1F2328; --muted:#8A8F98; --ok:#1A7F37; --err:#C0392B; --brand:#0891B2; --mono:ui-monospace,Menlo,monospace; }
+  body { margin:0; padding:20px 24px; background:var(--bg); color:var(--fg); font:14px/1.55 -apple-system,system-ui,sans-serif; }
+  h1 { font-size:17px; margin:0 0 2px; } .lede { color:var(--muted); font-size:12px; margin:0 0 14px; max-width:900px; }
+  .row { display:flex; gap:8px; align-items:center; margin:12px 0 12px; flex-wrap:wrap; }
+  input, button, select { font:inherit; padding:6px 10px; border:1px solid #D5D3CB; border-radius:4px; background:#fff; }
+  input { min-width:220px; } button { cursor:pointer; } button.danger { color:var(--err); }
+  #live { color:var(--muted); font-size:11px; }
+  #status { color:var(--muted); font-size:11px; min-height:16px; }
+  #status.err { color:var(--err); } #status.ok { color:var(--ok); }
+  .finding { border-bottom:1px solid #F0EFEA; padding:10px 0; }
+  .topicPill { display:inline-block; padding:1px 7px; border-radius:10px; font-size:10px; background:#E0F2FE; color:var(--brand); margin-right:6px; }
+  .idPill { display:inline-block; padding:1px 6px; border-radius:10px; font-size:10px; background:#F0EFEA; color:var(--muted); font-family:var(--mono); margin-right:6px; }
+  .title { font-weight:600; }
+  .url { color:var(--muted); font-size:12px; word-break:break-all; }
+  .url a { color:var(--brand); text-decoration:none; }
+  .url a:hover { text-decoration:underline; }
+  .excerpt { color:#4a4d52; font-size:13px; margin-top:4px; }
+  .notes { color:var(--muted); font-size:12px; margin-top:4px; font-style:italic; }
+  .meta { color:var(--muted); font-size:11px; font-family:var(--mono); margin-top:2px; }
+  .btnDrop { float:right; font-size:11px; }
+</style>
+</head>
+<body>
+<h1>Research Notebook <span id="live">· connecting…</span></h1>
+<p class="lede">Every finding the agent saves lands here — live. Filter by topic, drop any entry, or add your own note. Cross-process pulse means the notebook updates even when the agent is running in a separate terminal.</p>
+
+<div class="row">
+  <select id="topicSelect">
+    <option value="">All topics</option>
+  </select>
+  <input id="newTopic" placeholder="Or type a topic to filter…" />
+  <span id="count" class="muted"></span>
+  <span id="status" style="margin-left:auto"></span>
+</div>
+
+<div id="findings"><p class="muted" style="padding:14px">loading…</p></div>
+
+<script>
+const token = new URLSearchParams(location.search).get('token') || '';
+const PLUGIN = 'research-studio';
+
+function setStatus(msg, tone) {
+  const el = document.getElementById('status');
+  el.textContent = msg || ''; el.className = tone || '';
+}
+async function state(op, extra = {}) {
+  const res = await fetch('/api/plugin-state/' + PLUGIN, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Bahulam-Local-Token': token },
+    body: JSON.stringify({ op, ...extra }),
+  });
+  const body = await res.json();
+  if (!res.ok || body.ok === false) throw new Error(body.error || body.message || 'state op failed');
+  return body.result;
+}
+async function tool(name, args = {}) {
+  const res = await fetch('/api/tools/execute', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Bahulam-Local-Token': token },
+    body: JSON.stringify({ name, args }),
+  });
+  const body = await res.json();
+  if (!res.ok || body.ok === false) throw new Error(body.error || 'tool call failed');
+  if (body.result?.success === false) throw new Error(String(body.result.output));
+  return body.result;
+}
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtTime(iso) { return (iso || '').replace('T', ' ').slice(0, 19); }
+
+async function reload() {
+  const container = document.getElementById('findings');
+  try {
+    const filter = document.getElementById('newTopic').value.trim()
+                || document.getElementById('topicSelect').value.trim();
+    const rows = await state('list', { stream: 'findings', limit: 500, order: 'desc' });
+    const findings = (rows || []).filter(r => !filter || (r.payload?.topic || '').toLowerCase() === filter.toLowerCase());
+
+    // Refresh the topic dropdown with unique topics we've seen
+    const topics = [...new Set((rows || []).map(r => r.payload?.topic).filter(Boolean))].sort();
+    const sel = document.getElementById('topicSelect');
+    const current = sel.value;
+    sel.innerHTML = '<option value="">All topics</option>' + topics.map(t => `<option value="${escapeHtml(t)}" ${t===current?'selected':''}>${escapeHtml(t)}</option>`).join('');
+
+    document.getElementById('count').textContent = `${findings.length} finding${findings.length === 1 ? '' : 's'}`;
+
+    if (!findings.length) {
+      container.innerHTML = '<p class="muted" style="padding:14px">no findings' + (filter ? ' for that topic' : '') + ' yet — ask the research-analyst agent</p>';
+      return;
+    }
+    container.innerHTML = findings.map(r => {
+      const p = r.payload || {};
+      return `<div class="finding">
+        <button class="btnDrop danger" data-drop="${r.id}">Drop</button>
+        <span class="idPill">#${r.id}</span><span class="topicPill">${escapeHtml(p.topic || '')}</span>
+        <span class="title">${escapeHtml(p.title || '')}</span>
+        <div class="url"><a href="${escapeHtml(p.url || '')}" target="_blank" rel="noreferrer">${escapeHtml(p.url || '')}</a></div>
+        ${p.excerpt ? `<div class="excerpt">${escapeHtml(p.excerpt)}</div>` : ''}
+        ${p.notes ? `<div class="notes">${escapeHtml(p.notes)}</div>` : ''}
+        <div class="meta">${fmtTime(r.created_at || p.at)}</div>
+      </div>`;
+    }).join('');
+    container.querySelectorAll('button[data-drop]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        try { await tool('drop_finding', { id: Number(btn.getAttribute('data-drop')) }); setStatus('dropped', 'ok'); }
+        catch (err) { setStatus(err.message, 'err'); }
+      });
+    });
+  } catch (err) {
+    container.innerHTML = `<p style="padding:14px;color:var(--err)">${escapeHtml(err.message)}</p>`;
+  }
+}
+
+document.getElementById('newTopic').addEventListener('input', () => scheduleReload());
+document.getElementById('topicSelect').addEventListener('change', () => reload());
+
+// Reactive canvas: precise + coarse pulse.
+let _t = null;
+const scheduleReload = () => { clearTimeout(_t); _t = setTimeout(reload, 200); };
+try {
+  const es = new EventSource('/api/events?token=' + encodeURIComponent(token));
+  es.addEventListener('open',  () => { document.getElementById('live').textContent = '· live'; });
+  es.addEventListener('error', () => { document.getElementById('live').textContent = '· reconnecting…'; });
+  es.addEventListener('plugin_state_changed', (ev) => {
+    let evt = {}; try { evt = JSON.parse(ev.data || '{}'); } catch {}
+    if (evt.plugin !== PLUGIN) return;
+    scheduleReload();
+  });
+} catch { /* SSE unavailable; still functional but load-only */ }
+
+reload();
+</script>
+</body>
+</html>

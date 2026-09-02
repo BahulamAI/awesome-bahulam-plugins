@@ -92,17 +92,17 @@ spec:
         - list_snapshots
         - drop_snapshot
         # Composed pi-redmine (Redmine REST)
-        - redmine.redmine_list_projects
-        - redmine.redmine_get_project
-        - redmine.redmine_list_issues
-        - redmine.redmine_get_issue
-        - redmine.redmine_create_issue
-        - redmine.redmine_update_issue
-        - redmine.redmine_list_time_entries
-        - redmine.redmine_log_time
-        - redmine.redmine_get_wiki_page
-        - redmine.redmine_update_wiki_page
-        - redmine.redmine_search
+        - redmine__redmine_list_projects
+        - redmine__redmine_get_project
+        - redmine__redmine_list_issues
+        - redmine__redmine_get_issue
+        - redmine__redmine_create_issue
+        - redmine__redmine_update_issue
+        - redmine__redmine_list_time_entries
+        - redmine__redmine_log_time
+        - redmine__redmine_get_wiki_page
+        - redmine__redmine_update_wiki_page
+        - redmine__redmine_search
       system_prompt: |
         You are the Redmine Analyst. You have two toolsets:
 
@@ -120,7 +120,7 @@ spec:
           call `list_snapshots` FIRST (fast, local) before re-querying
           Redmine. Only re-query Redmine if the snapshot is stale or the
           user asks explicitly.
-        - When you fetch an issue via `redmine.redmine_get_issue`, if it
+        - When you fetch an issue via `redmine__redmine_get_issue`, if it
           looks important (open bug, blocker, assigned to user, or the
           user says "watch this"), also call `save_issue_snapshot` so the
           human panel and future turns can see it.

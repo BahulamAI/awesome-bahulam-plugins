@@ -53,8 +53,8 @@ bahulam
 ```
 
 The agent will:
-1. Call `redmine.redmine_list_projects`
-2. Call `redmine.redmine_list_issues` for the target project
+1. Call `redmine__redmine_list_projects`
+2. Call `redmine__redmine_list_issues` for the target project
 3. Call `save_issue_snapshot` for each High-priority match
 4. Open the Studio panel and you'll see rows appear live as each snapshot lands
 
@@ -65,7 +65,7 @@ bahulam plugin redmine-studio .
 ```
 
 Opens the Redmine Studio panel in your browser. You can:
-- Enter an issue id → the panel calls `redmine.redmine_get_issue` (composed pi tool) → then `save_issue_snapshot` (our native tool) → the row appears
+- Enter an issue id → the panel calls `redmine__redmine_get_issue` (composed pi tool) → then `save_issue_snapshot` (our native tool) → the row appears
 - Ask the agent from a separate terminal session — the panel updates live via the cross-process fs-watch pulse
 
 ## How the composition works
@@ -83,7 +83,7 @@ spec:
       verified: true
 ```
 
-The agent sees a unified toolset (`save_issue_snapshot`, `redmine.redmine_list_projects`, …). pi-redmine runs stateless — it takes an API call, returns JSON. Our layer persists the important results so the workspace panel has something to bind to and the next turn has memory.
+The agent sees a unified toolset (`save_issue_snapshot`, `redmine__redmine_list_projects`, …). pi-redmine runs stateless — it takes an API call, returns JSON. Our layer persists the important results so the workspace panel has something to bind to and the next turn has memory.
 
 ## Layout
 
