@@ -17,13 +17,18 @@
 
 A **plugin** bundles tools, sub-agents, and a live workspace panel into a single directory.
 
-Two ways to get one:
-
-- **Hand-authored packs** (this repo) — install by name or from a URL:
+**Hand-authored packs** (this repo) — install by name or from a URL:
   `bahulam plugin install <name>`
-- **[pi](https://www.npmjs.com/search?q=pi-) ecosystem** — any `pi:<npm-package>`
-  scaffolds a full pack in one command with state layer + workspace + agent:
+
+**[pi](https://www.npmjs.com/search?q=pi-) ecosystem** — pi packages are first-class
+  **ingredients** in the plugin system. Plugins compose them directly in `plugin.yaml`
+  via the `composes:` block (see `redmine-studio` which brings in all 11 pi-redmine
+  tools). Use a pi package standalone to experiment:
   `bahulam install pi:pi-redmine`
+
+**Plugin = pi + state + workspace + agent** — every studio in this repo wraps a pi
+  package with a persistent blackboard, a workspace panel, and a specialist agent.
+  The user just runs `bahulam plugin install <studio>` — the pi tools come along.
 
 ---
 
@@ -129,8 +134,12 @@ bahulam plugin install hello-world          # install by registry name
 bahulam plugin install ./my-plugin          # from a local checkout
 bahulam plugin install https://github.com/… # from a git URL
 
-# —· pi ecosystem (auto-scaffolds a full pack) ·—
-bahulam install pi:pi-redmine                # one-command: pull + scaffold + install
+# —· Plugin with full pi integration (pi tools come as composed ingredients) ·—
+bahulam plugin install redmine-studio       # includes all 11 pi-redmine tools via composes:
+bahulam plugin install research-studio      # includes pi-web-access search/fetch tools
+
+# —· pi ecosystem standalone ·—
+bahulam install pi:pi-redmine                # auto-scaffold a full pack from a pi package
 bahulam pull pi:pi-web-access                # 🧩 raw ingredient (composable, not directly runnable)
 ```
 
@@ -175,7 +184,12 @@ Every Bahulam plugin follows the same contract:
 <tr>
 <td><strong>MCP servers</strong></td>
 <td>Bundled stdio or remote servers</td>
-<td><code>hex-color.mjs</code>, pi-redmine</td>
+<td><code>hex-color.mjs</code></td>
+</tr>
+<tr>
+<td><strong>Pi ingredients 🆕</strong></td>
+<td>Composed <code>pi:*</code> packages from npm — tools become plugin tools via <code>composes:</code></td>
+<td><code>pi-redmine</code> (11 tools), <code>pi-web-access</code> (4 tools)</td>
 </tr>
 </table>
 
