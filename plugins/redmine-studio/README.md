@@ -18,8 +18,10 @@ The **composition model** end-to-end:
 ## Prerequisites
 
 ```bash
-# 1. Install the pi-redmine package (once)
-bahulam plugin install pi:pi-redmine
+# 1. Pull the pi-redmine ingredient (once) — usually not needed because
+#    installing redmine-studio auto-pulls it via composes:, but doing it
+#    first lets you inspect what the pi package exposes.
+bahulam pull pi:pi-redmine
 
 # 2. Configure Redmine credentials in your shell (pi-redmine reads these)
 export REDMINE_URL="https://your-redmine.example.com"
@@ -32,8 +34,11 @@ export REDMINE_API_KEY="your-api-key"
 ## Install & enable
 
 ```bash
-# From this repo
-bahulam plugin install /path/to/awesome-bahulam-plugins/plugins/redmine-studio
+# From the registry (this repo, subdir: plugins/redmine-studio)
+bahulam install redmine-studio
+
+# Or from a local checkout
+bahulam install /path/to/awesome-bahulam-plugins/plugins/redmine-studio
 
 # Enable the agent for your project — add to .bahulam/settings.json:
 # {

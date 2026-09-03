@@ -29,8 +29,10 @@ hello-mcp/
 ## Install
 
 ```bash
-bahulam plugin install hello-mcp                              # once merged to the registry
-bahulam plugin install https://github.com/BahulamAI/awesome-bahulam-plugins
+bahulam install hello-mcp                                     # via registry (this repo, subdir: plugins/hello-mcp)
+bahulam install bahulam:hello-mcp                             # explicit prefix, same result
+bahulam install https://github.com/BahulamAI/awesome-bahulam-plugins \
+  --subdir plugins/hello-mcp                                  # or clone by git URL
 ```
 
 ## Try it

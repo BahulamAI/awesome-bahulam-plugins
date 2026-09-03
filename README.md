@@ -18,7 +18,9 @@
 A **plugin** bundles tools, sub-agents, and a live workspace panel into a single directory.
 
 **Hand-authored packs** (this repo) — install by name or from a URL:
-  `bahulam plugin install <name>`
+  `bahulam install <name>` (or `bahulam install bahulam:<name>` with the
+  explicit prefix). Registry entries here point `repository` at this repo
+  itself with a `subdir` per pack — the community repo IS the source.
 
 **[pi](https://www.npmjs.com/search?q=pi-) ecosystem** — pi packages are first-class
   **ingredients** in the plugin system. Plugins compose them directly in `plugin.yaml`
@@ -28,7 +30,8 @@ A **plugin** bundles tools, sub-agents, and a live workspace panel into a single
 
 **Plugin = pi + state + workspace + agent** — every studio in this repo wraps a pi
   package with a persistent blackboard, a workspace panel, and a specialist agent.
-  The user just runs `bahulam plugin install <studio>` — the pi tools come along.
+  The user just runs `bahulam install <studio>` — the pi tools come along
+  automatically via the pack's `composes:` block.
 
 ---
 
@@ -48,7 +51,7 @@ The starting point. One tool, one sub-agent, one workspace panel. Copy it and st
 - `selftest.mjs` — smoke-test offline
 
 ```bash
-bahulam plugin install hello-world
+bahulam install hello-world
 ```
 
 </div>
@@ -66,7 +69,7 @@ Bundles a stdio MCP server, JS state tools, a sub-agent that composes both, and 
 - `selftest.mjs` — offline smoke test
 
 ```bash
-bahulam plugin install hello-mcp
+bahulam install hello-mcp
 ```
 
 </div>
@@ -83,7 +86,7 @@ Describe a concept → the **animator** agent writes a Manim CE scene, launches 
 - `selftest.mjs` — offline smoke test
 
 ```bash
-bahulam plugin install manim-studio
+bahulam install manim-studio
 ```
 
 </div>
@@ -100,7 +103,7 @@ Composes [pi-redmine](https://www.npmjs.com/package/pi-redmine)'s 11 REST tools 
 - `plugin.yaml` — composes pi-redmine as ingredients
 
 ```bash
-bahulam plugin install redmine-studio        # hand-authored pack
+bahulam install redmine-studio               # hand-authored pack
 bahulam install pi:pi-redmine                # or scaffold from the pi ingredient
 ```
 
@@ -117,7 +120,7 @@ A persistent notebook that survives across turns. Save, list, and drop research 
 - `workspace/` — notebook panel
 
 ```bash
-bahulam plugin install research-studio
+bahulam install research-studio
 ```
 
 </div>
@@ -130,13 +133,13 @@ bahulam plugin install research-studio
 
 ```bash
 # —· Hand-authored packs (this repo) ·—
-bahulam plugin install hello-world          # install by registry name
-bahulam plugin install ./my-plugin          # from a local checkout
-bahulam plugin install https://github.com/… # from a git URL
+bahulam install hello-world          # install by registry name
+bahulam install ./my-plugin                 # from a local checkout
+bahulam install https://github.com/…        # from a git URL
 
 # —· Plugin with full pi integration (pi tools come as composed ingredients) ·—
-bahulam plugin install redmine-studio       # includes all 11 pi-redmine tools via composes:
-bahulam plugin install research-studio      # includes pi-web-access search/fetch tools
+bahulam install redmine-studio              # includes all 11 pi-redmine tools via composes:
+bahulam install research-studio      # includes pi-web-access search/fetch tools
 
 # —· pi ecosystem standalone ·—
 bahulam install pi:pi-redmine                # auto-scaffold a full pack from a pi package
@@ -199,7 +202,7 @@ Plugins are composable — `redmine-studio` wraps `pi-redmine` as an ingredient 
 
 ## 📋 Registry
 
-The `registry.json` at the root of this repo is the source of truth for `bahulam plugin install <name>`. The CLI fetches it, matches `name` case-insensitively, and delegates to the git installer.
+The `registry.json` at the root of this repo is the source of truth for `bahulam install <name>` (and its explicit form `bahulam install bahulam:<name>`). The CLI fetches it, matches `name` case-insensitively, and delegates to the git installer. Every entry points `repository` at this repo itself with `ref: main` and a `subdir` — a shallow clone of that subdirectory IS the plugin.
 
 <details>
 <summary><strong>Registry schema</strong></summary>
@@ -243,7 +246,7 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full guide. The short version:
 1. **Fork** this repo
 2. **Add** your plugin entry to `registry.json` (alphabetically sorted)
 3. **Verify** it parses: `node -e 'JSON.parse(require("fs").readFileSync("registry.json"))'`
-4. **Open a PR** with a link to your plugin, screenshots of any workspace view, and the output of `bahulam plugin info <your-name>`
+4. **Open a PR** with a link to your plugin, screenshots of any workspace view, and the output of `bahulam info <your-name>`
 
 **Review checklist:**
 

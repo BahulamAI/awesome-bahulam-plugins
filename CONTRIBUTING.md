@@ -8,7 +8,7 @@
 4. Open a PR with:
    - Link to your plugin repo
    - Screenshot(s) of any workspace view
-   - Output of `bahulam plugin install <your-git-url> && bahulam plugin info <your-name>`
+   - Output of `bahulam install <your-git-url> && bahulam info <your-name>`
 
 ## Adding your plugin as a subdirectory here
 

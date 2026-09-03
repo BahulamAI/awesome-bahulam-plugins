@@ -21,11 +21,14 @@ hello-world/
 ## Install
 
 ```bash
-# by registry name (once merged into awesome-bahulam-plugins)
-bahulam plugin install hello-world
+# by registry name (resolves via awesome-bahulam-plugins/registry.json;
+# does a shallow clone of this repo's `plugins/hello-world/` subdir)
+bahulam install hello-world
+bahulam install bahulam:hello-world       # explicit prefix, same result
 
-# from this repo
-bahulam plugin install https://github.com/BahulamAI/awesome-bahulam-plugins
+# from a git URL (e.g. installing a fork)
+bahulam install https://github.com/BahulamAI/awesome-bahulam-plugins \
+  --subdir plugins/hello-world
 ```
 
 ## Try it

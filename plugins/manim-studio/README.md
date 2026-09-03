@@ -20,7 +20,8 @@ tool logic is tested offline).
 ## Install & try
 
 ```bash
-bahulam plugin install manim-studio     # once merged into the registry
+bahulam install manim-studio            # via registry (this repo, subdir: plugins/manim-studio)
+bahulam install bahulam:manim-studio    # explicit prefix, same result
 bahulam plugin manim-studio .           # opens the studio workspace
 ```
 
