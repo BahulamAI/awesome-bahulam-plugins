@@ -7,7 +7,7 @@
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { call as saveScene } from './tools/save-scene.mjs';
+import { call as renderScene } from './tools/render-scene.mjs';
 import { call as registerRender } from './tools/register-render.mjs';
 import { call as listRenders } from './tools/list-renders.mjs';
 
@@ -24,15 +24,15 @@ for (const [cmd, args] of [['python3', ['--version']], ['manim', ['--version']],
   else console.warn(`warn prereq ${cmd} not found — renders will fail until installed`);
 }
 
-// ── save_scene ──
+// ── render_scene ──
 const SCENE = `from manim import *\n\nclass SelfTest(Scene):\n    def construct(self):\n        self.play(Create(Circle()))\n        self.wait()\n`;
 {
-  const bad = await saveScene({ name: 'Bad Name!', scene_class: 'SelfTest', code: SCENE });
-  ok('save_scene rejects bad slug', bad.success === false);
-  const mismatch = await saveScene({ name: 'selftest', scene_class: 'Other', code: SCENE });
-  ok('save_scene rejects class mismatch', mismatch.success === false);
-  const good = await saveScene({ name: 'selftest', scene_class: 'SelfTest', code: SCENE, quality: 'l' });
-  ok('save_scene writes the scene file', good.success === true && fs.existsSync(good.scene_path));
+  const bad = await renderScene({ name: 'Bad Name!', scene_class: 'SelfTest', code: SCENE });
+  ok('render_scene rejects bad slug', bad.success === false);
+  const mismatch = await renderScene({ name: 'selftest', scene_class: 'Other', code: SCENE });
+  ok('render_scene rejects class mismatch', mismatch.success === false);
+  const good = await renderScene({ name: 'selftest', scene_class: 'SelfTest', code: SCENE, quality: 'l' });
+  ok('render_scene writes the scene file', good.success === true && fs.existsSync(good.scene_path));
   ok('render command targets manim CE', /^manim render -ql /.test(good.render_command));
   ok('render command includes on_complete guidance', good.output.includes('render-reviewer'));
 }
