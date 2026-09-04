@@ -1,11 +1,11 @@
-# manim-studio spec
+# manim-studio config
 
 Canonical source of truth for content shared between this OSS plugin
 (local CLI substrate) and Bahulam's hosted Video Studio product
-(`bahulam.ai/video`, cloud substrate). Everything under `spec/` MUST
+(`bahulam.ai/video`, cloud substrate). Everything under `config/` MUST
 be identical in both places at deploy time.
 
-Substrate-specific implementation lives outside `spec/`:
+Substrate-specific implementation lives outside `config/`:
 - OSS `plugins/manim-studio/tools/*.mjs` — local `manim` subprocess
 - SaaS `codekepler-backend/app/workspaces/video_studio/*.py` — HTTPS
   POST to a Django render service
@@ -27,9 +27,9 @@ strictly the execution substrate + storage endpoint.
 
 ## Sync obligation
 
-- OSS side: this repo IS the source. Editing files under `spec/` is
+- OSS side: this repo IS the source. Editing files under `config/` is
   a normal PR.
 - SaaS side: `codekepler-backend` vendors this repo as a git submodule
   at `vendor/awesome-bahulam-plugins/`. A CI job diffs the SaaS
-  animator/reviewer prompts against `spec/prompts/*.md` and fails the
+  animator/reviewer prompts against `config/prompts/*.md` and fails the
   build if they drift. Update the submodule pin to pull in changes.

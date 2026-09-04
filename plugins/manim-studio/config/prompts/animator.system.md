@@ -103,5 +103,5 @@ errors verbatim so the director can decide whether to escalate or abandon.
 - Keep total objects per scene under ~20 so draft renders stay fast.
 - `self.wait()` at the end of every scene.
 
-See also: `spec/scene-rules.md` (imports allowlist, forbidden patterns,
-quality tiers) and `spec/assets-convention.md` (assets/ layout).
+See also: `config/scene-rules.md` (imports allowlist, forbidden patterns,
+quality tiers) and `config/assets-convention.md` (assets/ layout).

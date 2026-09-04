@@ -18,7 +18,7 @@ spec:
     - name: render_scene
       description: >
         Canonical Bahulam render tool (see
-        spec/tools/render-scene.tool.yaml). Writes a Manim CE scene to
+        config/tools/render-scene.tool.yaml). Writes a Manim CE scene to
         manim-studio/renders/<slug>/{scene.py, manifest.json[, script.md]}
         so the source, storyboard, manifest, and eventually the rendered
         video all live in one folder — inspectable from a plain file
@@ -30,7 +30,7 @@ spec:
         and returns the manim CLI command for the agent to launch via
         `shell run_in_background`. SaaS impl (bahulam.ai/video) instead
         blocks-and-returns-URL — same tool name + params, different
-        substrate. See spec/README.md.
+        substrate. See config/README.md.
       tool: ./tools/render-scene.mjs
       parameters:
         type: object
@@ -136,7 +136,7 @@ spec:
                    command: <render_command from render_scene> }
            Do NOT wait for it — move on to the next scene or task.
            (SaaS deployments of this same tool block-and-return-URL
-           instead of returning a shell command — see the spec/README.)
+           instead of returning a shell command — see the config/README.)
         4. If asked for multiple scenes, save and launch each render
            before any of them finish. Check overall progress with
            job_output only when you have nothing left to write.

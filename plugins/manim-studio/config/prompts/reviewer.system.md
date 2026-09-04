@@ -61,5 +61,5 @@ communication about the reject.
 - Never call `render_scene` yourself — the animator owns retries.
 - Never modify `assets/` — the animator owns that library.
 
-See also: `spec/scene-rules.md` (what "correct" looks like) and
-`spec/assets-convention.md` (why fonts/colors should come from assets/).
+See also: `config/scene-rules.md` (what "correct" looks like) and
+`config/assets-convention.md` (why fonts/colors should come from assets/).

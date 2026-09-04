@@ -83,13 +83,48 @@ constants + boilerplate every time.
 
 ```
 plugins/manim-studio/
-├── plugin.yaml
+├── plugin.yaml                # agent + tool + workspace declarations
 ├── tools/
-│   ├── render-scene.mjs      # writes render folder + returns the render command
-│   ├── register-render.mjs   # blackboard write the gallery listens to
-│   └── list-renders.mjs      # history for agent + humans
+│   ├── render-scene.mjs       # writes render folder + returns render command
+│   ├── register-render.mjs    # blackboard write the gallery listens to
+│   └── list-renders.mjs       # history for agent + humans
 ├── workspace/
-│   └── studio.html           # live render gallery
+│   └── studio.html            # live render gallery panel
+├── config/                    # ← shared spec (see config/README.md)
+│   ├── scene-rules.md         # Manim CE writing rules
+│   ├── assets-convention.md   # assets/ folder layout
+│   ├── manifest.schema.json   # per-render manifest.json shape
+│   ├── prompts/               # substrate-agnostic prompt fragments
+│   └── tools/                 # tool contracts (name, params, return)
 ├── selftest.mjs
 └── README.md
 ```
+
+## How the CLI consumes this (codekepler-npm)
+
+`bahulam install manim-studio` copies the whole plugin folder to
+`~/.bahulam/plugins/manim-studio/` on the user's machine — including
+`config/`. From there:
+
+1. **`plugin.yaml`** — the CLI's `PluginRegistry.scan()` parses this
+   file to learn about the tools, agents, and workspace panel. The
+   agent system prompts are inlined here, so no runtime template
+   resolution is needed.
+2. **`config/`** — ships to the user's disk alongside the code. The
+   CLI doesn't process it specially, but the animator agent can
+   `read_file ~/.bahulam/plugins/manim-studio/config/scene-rules.md`
+   at runtime if the prompt tells it to (right now it doesn't need to
+   — the rules are already baked into the inline prompt).
+3. **`tools/*.mjs`** — the CLI's tool executor loads these dynamically
+   when the agent calls `render_scene`, `register_render`, or
+   `list_renders`.
+
+The SaaS Video Studio (`bahulam.ai/video`) vendors this same repo as a
+git submodule under `codekepler-backend/vendor/awesome-bahulam-plugins/`
+and CI-diffs its inline SaaS prompts against `config/prompts/*.md` to
+prevent drift. See `config/README.md`.
+
+**Bottom line**: `plugin.yaml` is the executable manifest the CLI runs.
+`config/` is the canonical spec that plugin.yaml + the SaaS mirror both
+derive from. Edit `config/` first, then mirror to `plugin.yaml`
+(inlining) and to the SaaS-side workspace configs.

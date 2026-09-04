@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/BahulamAI/awesome-bahulam-plugins/plugins/manim-studio/spec/manifest.schema.json",
+  "$id": "https://github.com/BahulamAI/awesome-bahulam-plugins/plugins/manim-studio/config/manifest.schema.json",
   "title": "manim-studio render manifest",
   "description": "Per-render metadata written to renders/<slug>/manifest.json by both the OSS plugin and the SaaS Video Studio. Every field except output_url/output_path is populated at save time; the output field is populated when the render completes.",
   "type": "object",
