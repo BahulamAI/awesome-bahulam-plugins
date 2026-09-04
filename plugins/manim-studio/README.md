@@ -41,7 +41,33 @@ Or the full showcase — parallel scenes, background renders, self-healing:
 
 Watch the terminal (two animator lanes, background job ids, the reviewer
 waking per completion) and the Manim Studio panel (each render appears
-the moment it finishes). Videos land under `.bahulam/tmp/manim/media/`.
+the moment it finishes). Everything lands under
+`.bahulam/tmp/manim/manim-studio/` in a structured tree — see below.
+
+## Files each render creates
+
+```
+.bahulam/tmp/manim/manim-studio/
+├── assets/                            ← curated, shared across renders (opt-in)
+│   ├── colors.py                        BRAND_BLUE, BG_DARK, ACCENT, …
+│   ├── fonts.yaml                       font families the animator may use
+│   ├── helpers/                         reusable animation utilities
+│   └── templates/                       reusable Scene base classes
+└── renders/<slug>/                    ← one folder per rendered scene
+    ├── scene.py                         the Manim CE source
+    ├── script.md                        approved storyboard (when provided)
+    ├── manifest.json                    {slug, class, quality, render_command,
+    │                                     expected_video, created_at, status}
+    └── videos/<slug>/<res>/<Class>.mp4  manim's rendered output
+```
+
+The `assets/` folder is optional. The animator agent checks it before every
+scene and reuses whatever's there (colors, fonts, helper classes) so
+successive renders in the same project stay visually consistent. If the
+animator invents a helper that the next scene will also need, it writes it
+back into `assets/helpers/` so future runs pick it up automatically. This
+keeps each `scene.py` focused on the story instead of restating brand
+constants + boilerplate every time.
 
 ## How it exercises the platform
 
@@ -53,13 +79,13 @@ the moment it finishes). Videos land under `.bahulam/tmp/manim/media/`.
 | Reactive canvas (cross-process) | gallery re-renders on `plugin_state_changed`, including the coarse `kind:'*'` pulse when the agent ran in the terminal |
 | Self-healing pipeline | reviewer reads the failed job's log tail, patches the scene, re-renders |
 
-## Layout
+## Plugin source layout
 
 ```
 plugins/manim-studio/
 ├── plugin.yaml
 ├── tools/
-│   ├── save-scene.mjs        # writes scene .py, returns the render command
+│   ├── save-scene.mjs        # writes render folder + returns the render command
 │   ├── register-render.mjs   # blackboard write the gallery listens to
 │   └── list-renders.mjs      # history for agent + humans
 ├── workspace/
