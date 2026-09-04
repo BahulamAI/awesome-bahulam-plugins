@@ -7,9 +7,6 @@
  * Django render service that blocks-and-returns-URL. Both write the
  * same manifest.json shape (see spec/manifest.schema.json).
  *
- * Legacy name `save_scene` is aliased in plugin.yaml for
- * back-compatibility during the rename rollout.
- *
  * Layout (this file writes into .bahulam/tmp/manim/manim-studio/ under
  * the current working directory):
  *

@@ -85,7 +85,7 @@ constants + boilerplate every time.
 plugins/manim-studio/
 ├── plugin.yaml
 ├── tools/
-│   ├── save-scene.mjs        # writes render folder + returns the render command
+│   ├── render-scene.mjs      # writes render folder + returns the render command
 │   ├── register-render.mjs   # blackboard write the gallery listens to
 │   └── list-renders.mjs      # history for agent + humans
 ├── workspace/

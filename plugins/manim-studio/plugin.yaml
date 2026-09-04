@@ -56,23 +56,6 @@ spec:
             description: "Optional approved storyboard/brief markdown. Persisted next to scene.py as script.md."
         required: [name, scene_class, code]
 
-    # Legacy alias. Some existing agent prompts still call save_scene by
-    # name; keep the alias while we finish the rename in downstream
-    # workspace configs. Remove once no callers remain.
-    - name: save_scene
-      description: "Deprecated alias for render_scene. Use render_scene."
-      tool: ./tools/render-scene.mjs
-      parameters:
-        type: object
-        properties:
-          name:         { type: string }
-          scene_class:  { type: string }
-          code:         { type: string }
-          quality:      { type: string, enum: [l, m, h] }
-          title:        { type: string }
-          script:       { type: string }
-        required: [name, scene_class, code]
-
     - name: register_render
       description: >
         Record a completed (or failed) render on the plugin's shared
