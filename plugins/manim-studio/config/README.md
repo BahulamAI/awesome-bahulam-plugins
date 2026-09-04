@@ -1,35 +1,44 @@
 # manim-studio config
 
-Canonical source of truth for content shared between this OSS plugin
-(local CLI substrate) and Bahulam's hosted Video Studio product
-(`bahulam.ai/video`, cloud substrate). Everything under `config/` MUST
-be identical in both places at deploy time.
+Reference documentation shared by both substrates of manim-studio (OSS
+CLI plugin + hosted SaaS Video Studio at `bahulam.ai/video`).
 
-Substrate-specific implementation lives outside `config/`:
-- OSS `plugins/manim-studio/tools/*.mjs` — local `manim` subprocess
-- SaaS `codekepler-backend/app/workspaces/video_studio/*.py` — HTTPS
-  POST to a Django render service
+**Not** the source of truth for agent prompts — those live inline in
+`plugin.yaml` (this repo) and mirror into the SaaS workspace configs.
+Everything under `config/` is prose that agents/tools reference:
 
-Both implementations honor the same tool contract, produce the same
-manifest shape, and get the same agent prompts. Where they differ is
-strictly the execution substrate + storage endpoint.
-
-## Contents
-
-| File | Consumed by | Purpose |
+| File | Purpose | Consumed by |
 |---|---|---|
-| `scene-rules.md` | animator prompt | Manim CE writing rules (imports, class shape, forbidden patterns, quality tiers) |
-| `assets-convention.md` | animator + reviewer prompts | Layout of the shared `assets/` folder (colors, fonts, helpers, templates) |
-| `manifest.schema.json` | tool implementations | JSON Schema for the per-render `manifest.json` |
-| `tools/render-scene.tool.yaml` | tool implementations | Canonical tool contract (name, params, return shape) |
-| `prompts/animator.system.md` | animator prompt | Substrate-agnostic system prompt fragment |
-| `prompts/reviewer.system.md` | reviewer prompt | Substrate-agnostic reviewer prompt |
+| `scene-rules.md` | Manim CE writing rules (imports, class shape, forbidden patterns, quality tiers) | animator prompt (referenced) |
+| `assets-convention.md` | Layout of the shared `assets/` folder (colors, fonts, helpers, templates) | animator + reviewer prompts (referenced) |
+| `manifest.schema.json` | JSON Schema for `renders/<slug>/manifest.json` | tool implementations validate against this |
+| `tools/render-scene.tool.yaml` | Canonical tool contract (name, params, return shape) | OSS + SaaS tool impls implement this |
+
+## The 3-way parity story
+
+```
+authored here (plugin.yaml + config/)
+        │
+        ├── bahulam install manim-studio
+        │      copies whole plugin dir to ~/.bahulam/plugins/manim-studio/
+        │      → CLI loads plugin.yaml verbatim (same file, same content)
+        │
+        └── codekepler-backend vendors this repo as git submodule
+               at vendor/awesome-bahulam-plugins/
+               → SaaS workspace configs mirror the plugin.yaml agent
+                 sections; CI parity check fails the build on drift
+```
+
+So there's exactly ONE agent-prompt source: `plugin.yaml`. Both the
+CLI runtime and the SaaS runtime derive from it. `config/` holds prose
+references + tool contracts that both substrates read but don't
+substitute into the prompt.
 
 ## Sync obligation
 
-- OSS side: this repo IS the source. Editing files under `config/` is
-  a normal PR.
-- SaaS side: `codekepler-backend` vendors this repo as a git submodule
-  at `vendor/awesome-bahulam-plugins/`. A CI job diffs the SaaS
-  animator/reviewer prompts against `config/prompts/*.md` and fails the
-  build if they drift. Update the submodule pin to pull in changes.
+- **Agents / prompts**: edit `plugin.yaml`, that's it. `bahulam install`
+  ships the new version to CLI users on next release. SaaS bumps the
+  submodule pin + syncs the mirror; the parity check catches misses.
+- **Scene rules / assets convention / manifest schema / tool contract**:
+  edit files under `config/`. Reference docs — no runtime dependency,
+  but both substrates cite them so keep them accurate.
