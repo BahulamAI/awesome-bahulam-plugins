@@ -85,14 +85,13 @@ config:
   # workspace.yaml convention so codekepler-backend can consume the
   # same file directly via git submodule. The director agent that
   # orchestrates the plan → animator → reviewer chain.
-  workspace_agent: ./config/workspace.yaml
+  workspace: ./config/workspace.yaml
 
   # Sub-agents the director delegates to. Auto-loaded by the CLI
   # manifest loader (see codekepler-npm PR #20).
   agents_from: ./config/agents/
 
-  workspace:
-    views:
-      - type: panel
-        name: Manim Studio
-        source: ./workspace/studio.html
+  views:
+    - type: panel
+      name: Manim Studio
+      source: ./workspace/studio.html

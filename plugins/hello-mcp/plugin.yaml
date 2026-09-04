@@ -12,7 +12,7 @@ metadata:
   author: BahulamAI
   repository: https://github.com/BahulamAI/awesome-bahulam-plugins
 
-spec:
+config:
   # ── MCP servers ─────────────────────────────────────────────────────
   # Every plugin can declare mcpServers inline (this block) OR drop a
   # sibling mcp.json in Claude-Desktop format. Both are merged; inline
@@ -58,46 +58,10 @@ spec:
           limit: { type: integer }
         required: []
 
-  # ── Sub-agents that WEAVE MCP tools with JS tools ───────────────────
-  # Notice how the agent's tools list mixes:
-  #   palette.describe_color, palette.palette_from  → MCP tools (namespaced <server>.<tool>)
-  #   save_palette, list_palettes                   → this plugin's JS tools
-  #   read_file                                     → built-in
-  agents:
-    - slug: palette-designer
-      name: Palette Designer
-      role: specialist
-      description: >
-        Designs and saves color palettes. Calls the palette MCP server
-        for the math, this plugin's save_palette for persistence.
-      tools:
-        - palette.describe_color
-        - palette.palette_from
-        - save_palette
-        - list_palettes
-      system_prompt: |
-        You are a palette designer.
-
-        When the user gives you a seed color or vibe:
-        1. Call `palette.describe_color` on the seed to understand it
-           (contrast, luminance, best text color).
-        2. Call `palette.palette_from` to generate a 5-swatch palette.
-           Default `mode` to "analogous"; use "complementary" for
-           high-contrast product UIs, "triadic" for playful/creative
-           surfaces.
-        3. Call `save_palette` to persist the result — a name, the
-           seed, the mode, and the swatches. This is what makes the
-           blackboard useful: the human sees it appear in the
-           workspace view instantly.
-
-        When asked "what have we saved so far?", call `list_palettes`
-        and summarize briefly.
-
-        Never fabricate hex codes; always use the MCP tools.
+  workspace: ./config/workspace.yaml
 
   # ── Workspace view (the human's side of the blackboard) ─────────────
-  workspace:
-    views:
-      - type: panel
-        name: Palette Studio
-        source: ./workspace/index.html
+  views:
+    - type: panel
+      name: Palette Studio
+      source: ./workspace/index.html

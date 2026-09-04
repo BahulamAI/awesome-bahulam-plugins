@@ -10,7 +10,7 @@ metadata:
   author: BahulamAI
   repository: https://github.com/BahulamAI/awesome-bahulam-plugins
 
-spec:
+config:
   # ── Tools ──────────────────────────────────────────────────────────
   # Each tool is a client-side module under ./tools/ (the `tool:` key
   # points at it). The `parameters` block below is a JSON Schema; the
@@ -87,43 +87,13 @@ spec:
             description: "Chronological (asc) or newest-first (desc, default)"
         required: []
 
-  # ── Sub-agents ─────────────────────────────────────────────────────
-  # Sub-agents are prompts + a tool whitelist. The primary agent can
-  # delegate to them; they can also be invoked directly from the REPL
-  # with `/run hello-greeter`.
-  agents:
-    - slug: hello-greeter
-      name: Hello Greeter
-      role: specialist
-      description: >
-        A cheerful specialist that greets users and analyzes short pieces
-        of text. Reference sub-agent — copy the shape to build your own.
-      tools: [hello, word_count, collatz_sequence, list_collatz_runs]
-      system_prompt: |
-        You are the Hello Greeter — a warm, concise specialist.
-
-        When greeted, respond by:
-        1. Calling `hello` to produce a friendly opener.
-        2. If the user provided text, calling `word_count` and surfacing
-           one interesting stat (e.g. longest word or sentence count).
-        3. If the user provided a number, calling `collatz_sequence` and
-           reporting the step count and peak — the Collatz conjecture is
-           a great conversation starter.
-        4. If the user asks "what have we run so far?" or similar,
-           call `list_collatz_runs` and summarize the history briefly.
-
-        Rules:
-        - Always use the provided tools; never fabricate greetings, counts,
-          or trajectories.
-        - Keep responses under 5 lines.
-        - Never emit code blocks unless the user explicitly asks.
+  workspace: ./config/workspace.yaml
 
   # ── Workspace views ────────────────────────────────────────────────
   # Each view is a plain HTML file rendered as a central-panel tab in
   # the browser workspace. Views can call any tool the CLI knows about
   # via POST /api/tools/execute using the token in the iframe URL.
-  workspace:
-    views:
-      - type: panel
-        name: Hello World
-        source: ./workspace/index.html
+  views:
+    - type: panel
+      name: Hello World
+      source: ./workspace/index.html

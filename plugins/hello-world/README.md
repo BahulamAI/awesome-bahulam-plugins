@@ -7,6 +7,8 @@ The minimal reference plugin for Bahulam. Copy it and start hacking.
 ```
 hello-world/
 ├── plugin.yaml                  # the manifest
+├── config/
+│   └── workspace.yaml           # entry agent prompt + tool allowlist
 ├── tools/
 │   ├── hello.mjs                # a synchronous, one-arg tool
 │   ├── word-count.mjs           # structured output, input validation
@@ -40,7 +42,7 @@ bahulam plugin hello-world .
 Opens a workspace with the "Hello World" tab in the central panel. Every
 button in the tab calls a plugin tool.
 
-Or invoke the sub-agent from the REPL (enable the plugin for the
+Or invoke the plugin entry agent from the REPL (enable the plugin for the
 project first — installed plugins are visible but inactive until
 enabled):
 

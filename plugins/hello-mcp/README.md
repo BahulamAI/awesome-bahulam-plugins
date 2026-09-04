@@ -7,7 +7,9 @@ template when you want to wrap an MCP server as a Bahulam plugin.
 
 ```
 hello-mcp/
-├── plugin.yaml              # declares mcpServers, tools, agents, workspace
+├── plugin.yaml              # declares mcpServers, tools, entry agent, view
+├── config/
+│   └── workspace.yaml       # entry agent prompt + tool allowlist
 ├── mcp-server/
 │   └── hex-color.mjs        # bundled stdio MCP server (stdlib Node, zero deps)
 ├── tools/
@@ -53,25 +55,27 @@ shared blackboard pattern working end-to-end.
 ## Swap the MCP server for a real one
 
 The bundled `hex-color.mjs` is stdlib Node so this repo is 100% self-contained.
-Real plugins usually pin a proper server. Replace the `mcpServers` block:
+Real plugins usually pin a proper server. Replace the `config.mcpServers`
+block:
 
 ```yaml
-mcpServers:
-  # Python via uvx (spawned at plugin activation, torn down at close)
-  quant-engine:
-    command: uvx
-    args: [options-quant-mcp]
+config:
+  mcpServers:
+    # Python via uvx (spawned at plugin activation, torn down at close)
+    quant-engine:
+      command: uvx
+      args: [options-quant-mcp]
 
-  # Any local binary
-  code-index:
-    command: /usr/local/bin/mcp-code-index
-    args: [--repo, "${WORKSPACE_ROOT}"]
+    # Any local binary
+    code-index:
+      command: /usr/local/bin/mcp-code-index
+      args: [--repo, "${WORKSPACE_ROOT}"]
 
-  # Remote MCP over SSE / streamable-HTTP
-  markets:
-    url: https://mcp.tradeco.com/sse
-    headers:
-      Authorization: Bearer ${MCP_TRADECO_TOKEN}
+    # Remote MCP over SSE / streamable-HTTP
+    markets:
+      url: https://mcp.tradeco.com/sse
+      headers:
+        Authorization: Bearer ${MCP_TRADECO_TOKEN}
 ```
 
 Or drop a `mcp.json` next to `plugin.yaml` if you already have one:

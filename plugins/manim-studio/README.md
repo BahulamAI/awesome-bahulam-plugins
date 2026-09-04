@@ -83,7 +83,7 @@ constants + boilerplate every time.
 
 ```
 plugins/manim-studio/
-├── plugin.yaml                # agent + tool + workspace declarations
+├── plugin.yaml                # tool, entry-agent path, subagent path, view declarations
 ├── tools/
 │   ├── render-scene.mjs       # writes render folder + returns render command
 │   ├── register-render.mjs    # blackboard write the gallery listens to
@@ -91,7 +91,8 @@ plugins/manim-studio/
 ├── workspace/
 │   └── studio.html            # live render gallery panel
 ├── config/                    # subagents + reference docs
-│   ├── agents/                # director, planner, animator, reviewer
+│   ├── workspace.yaml         # primary/entry agent (director)
+│   ├── agents/                # delegated subagents: planner, animator, reviewer
 │   ├── reference/             # Manim rules and asset conventions
 │   │   ├── scene-rules.md
 │   │   └── assets-convention.md
@@ -107,13 +108,15 @@ plugins/manim-studio/
 `config/`. From there:
 
 1. **`plugin.yaml`** — the CLI's `PluginRegistry.scan()` parses this
-   file to learn about the tools and workspace panel. Its `config`
-   block points `agents_from` at `config/agents/`.
-2. **`config/agents/*.yaml`** — the source of truth for the director
-   and sub-agent prompts. npm expands these into the runtime agent list;
-   backend and marketplace consumers can read the same files from the
-   plugin package.
-3. **`tools/*.mjs`** — the CLI's tool executor loads these dynamically
+   file to learn about tools, the entry agent path, subagent path, and
+   workspace panel. Its `config` block points `workspace` at
+   `config/workspace.yaml` and `agents_from` at `config/agents/`.
+2. **`config/workspace.yaml`** — the source of truth for the primary
+   director agent, matching the SaaS workspace convention.
+3. **`config/agents/*.yaml`** — delegated subagent prompts. npm expands
+   these into the runtime agent list; backend and marketplace consumers
+   can read the same files from the plugin package.
+4. **`tools/*.mjs`** — the CLI's tool executor loads these dynamically
    when the agent calls `render_scene`, `register_render`, or
    `list_renders`.
 
@@ -138,12 +141,14 @@ agent allowlists.
 
 The SaaS Video Studio (`bahulam.ai/video`) vendors this same repo as a
 git submodule under `codekepler-backend/vendor/awesome-bahulam-plugins/`
-and CI-diffs its SaaS prompt mirror against `config/agents/*.yaml` to
+and CI-diffs its SaaS prompt mirror against `config/workspace.yaml` and
+`config/agents/*.yaml` to
 prevent drift. See `config/README.md`.
 
 **Bottom line**: `plugin.yaml` is the executable manifest all consumers
 can read directly. npm uses the top-level `config` contract for tools,
-agent references, and workspace declarations. Manim Studio keeps prompts
-in `config/agents/*.yaml` and references them with
-`config.agents_from`. SaaS mirrors those agent files into its workspace
-configs and the parity check catches drift.
+entry-agent references, subagent references, and view declarations.
+Manim Studio keeps the director in `config/workspace.yaml`, keeps
+delegated subagents in `config/agents/*.yaml`, and references them with
+`config.workspace` plus `config.agents_from`. SaaS mirrors those files
+into its workspace configs and the parity check catches drift.
