@@ -1,0 +1,4 @@
+node_modules/
+.bahulam/
+.DS_Store
+*.log

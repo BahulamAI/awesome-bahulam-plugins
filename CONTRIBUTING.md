@@ -26,8 +26,14 @@ install only your subdirectory.
 ## Manifest hygiene
 
 - `apiVersion: bahulam.plugin/1` is the only supported version
-- Everything lives under `spec:` — `spec.tools`, `spec.agents`,
-  `spec.workspace`, `spec.mcpServers`. Unknown keys are dropped.
+- Everything lives under `config:` — `config.tools`,
+  `config.workspace` (entry agent path), `config.agents_from`
+  (subagent folder), `config.views`, `config.mcpServers`, and
+  `config.composes`. Unknown keys are dropped.
+- Agent files referenced by `config.workspace` and `config.agents_from`
+  use the backend-compatible `apiVersion: agent.framework/v1` shape:
+  `metadata` for identity, `agent` for prompt/runtime caps, and top-level
+  `tools` for the allowlist.
 - Each tool entry points at its module with `tool: ./tools/<name>.mjs`
   (the legacy `handler:` key is not accepted)
 - Tool names: `^[A-Za-z_][A-Za-z0-9_-]{0,63}$`, must not shadow built-ins

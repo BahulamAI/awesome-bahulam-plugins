@@ -27,24 +27,6 @@
       "description": "Text-to-video animation studio — agent-written Manim scenes, background renders with wake-on-finish review, live gallery",
       "author": "BahulamAI",
       "tags": ["showcase", "video", "manim", "education"]
-    },
-    {
-      "name": "redmine-studio",
-      "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
-      "ref": "main",
-      "subdir": "plugins/redmine-studio",
-      "description": "Redmine ops Studio — triages, snapshots, and updates Redmine tickets via a persistent-state layer and live workspace panel",
-      "author": "BahulamAI",
-      "tags": ["showcase", "devops", "project-management"]
-    },
-    {
-      "name": "research-studio",
-      "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
-      "ref": "main",
-      "subdir": "plugins/research-studio",
-      "description": "Research findings notebook — persistent, turn-surviving notebook with web search and fetch tools",
-      "author": "BahulamAI",
-      "tags": ["reference", "research"]
     }
   ]
 }

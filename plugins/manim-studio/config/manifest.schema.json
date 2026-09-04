@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/BahulamAI/awesome-bahulam-plugins/plugins/manim-studio/config/manifest.schema.json",
+  "title": "manim-studio render manifest",
+  "description": "Per-render metadata written to renders/<slug>/manifest.json by both the OSS plugin and the SaaS Video Studio. Every field except output_url/output_path is populated at save time; the output field is populated when the render completes.",
+  "type": "object",
+  "required": ["slug", "scene_class", "quality", "created_at", "status"],
+  "additionalProperties": true,
+  "properties": {
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+      "description": "URL-safe folder name. Also the manim media_dir subfolder."
+    },
+    "title": {
+      "type": "string",
+      "description": "Human-readable label. Defaults to slug if not provided."
+    },
+    "scene_class": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Za-z0-9_]{0,63}$",
+      "description": "The Manim Scene subclass name defined in scene.py."
+    },
+    "quality": {
+      "type": "string",
+      "enum": ["l", "m", "h", "720p", "1080p", "1440p"],
+      "description": "Render quality tier. OSS uses l/m/h; SaaS uses 720p/1080p/1440p; both accepted."
+    },
+    "resolution": {
+      "type": "string",
+      "description": "Resolved manim resolution string (e.g. 480p15, 720p30, 1080p60)."
+    },
+    "scene_path": {
+      "type": ["string", "null"],
+      "description": "Path to the source scene.py (relative to workspace root on SaaS, absolute on OSS local disk)."
+    },
+    "script_path": {
+      "type": ["string", "null"],
+      "description": "Path to the approved storyboard script.md, if provided."
+    },
+    "output_url": {
+      "type": ["string", "null"],
+      "description": "SaaS: signed Azure Blob URL to the rendered mp4 (24h TTL). OSS: file:// path or absolute local path."
+    },
+    "output_path": {
+      "type": ["string", "null"],
+      "description": "Filesystem path to the mp4 (OSS: absolute local; SaaS: workspace-relative)."
+    },
+    "thumbnail_url": {
+      "type": ["string", "null"],
+      "description": "Signed URL to the thumbnail (SaaS) or file path (OSS)."
+    },
+    "thumbnail_path": {
+      "type": ["string", "null"]
+    },
+    "render_command": {
+      "type": ["string", "null"],
+      "description": "OSS only: the exact manim CLI command used. SaaS renders via HTTPS so this is null."
+    },
+    "expected_video": {
+      "type": ["string", "null"],
+      "description": "OSS pre-render prediction of where manim will drop the mp4."
+    },
+    "duration_ms": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "Total wall-clock render time (including upload for SaaS)."
+    },
+    "manim_ms": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "Just the manim invocation time; excludes SaaS-side blob upload."
+    },
+    "session_id": {
+      "type": ["string", "null"],
+      "description": "SaaS only: the chat id this render belongs to."
+    },
+    "project_id": {
+      "type": ["string", "null"],
+      "description": "SaaS only: chat-project grouping id."
+    },
+    "credits_charged": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "SaaS only: op-class credits debited on successful render."
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["saved", "rendering", "completed", "failed", "fixed_and_rerendered"],
+      "description": "Lifecycle: saved (before render), rendering, completed, failed, fixed_and_rerendered (retry succeeded)."
+    },
+    "notes": {
+      "type": ["string", "null"],
+      "description": "Reviewer verdict or human notes. One or two lines."
+    }
+  }
+}

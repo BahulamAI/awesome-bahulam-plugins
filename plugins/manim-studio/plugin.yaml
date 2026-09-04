@@ -13,19 +13,24 @@ metadata:
   author: BahulamAI
   repository: https://github.com/BahulamAI/awesome-bahulam-plugins
 
-spec:
+config:
   tools:
-    - name: save_scene
+    - name: render_scene
       description: >
-        Save a Manim CE scene to the project's render workspace and get
-        back the exact background-render command. Writes into
+        Canonical Bahulam render tool. Writes a Manim CE scene to
         manim-studio/renders/<slug>/{scene.py, manifest.json[, script.md]}
         so the source, storyboard, manifest, and eventually the rendered
         video all live in one folder — inspectable from a plain file
         browser. Shared reusable code lives one level up under
         manim-studio/assets/ (colors.py, fonts.yaml, helpers/, templates/)
         and can be imported from scene.py.
-      tool: ./tools/save-scene.mjs
+
+        OSS behavior (this impl): saves the files, records a manifest,
+        and returns the manim CLI command for the agent to launch via
+        `shell run_in_background`. SaaS impl (bahulam.ai/video) instead
+        blocks-and-returns-URL — same tool name + params, different
+        substrate. See config/README.md.
+      tool: ./tools/render-scene.mjs
       parameters:
         type: object
         properties:
@@ -76,100 +81,17 @@ spec:
           limit: { type: integer, description: "Max rows (default 20)" }
         required: []
 
-  agents:
-    - slug: animator
-      name: Manim Animator
-      role: specialist
-      description: >
-        Writes Manim Community Edition scenes from plain-language briefs
-        and drives background renders. Delegate any "make an animation /
-        explainer video of X" task here.
-      tools: [save_scene, list_renders, shell, job_output, read_file, ls]
-      system_prompt: |
-        You are the Manim Animator — you turn plain-language briefs into
-        rendered videos using Manim Community Edition.
+  # Entry/primary agent — the workspace's front door. Mirrors SaaS's
+  # workspace.yaml convention so codekepler-backend can consume the
+  # same file directly via git submodule. The director agent that
+  # orchestrates the plan → animator → reviewer chain.
+  workspace: ./config/workspace.yaml
 
-        Folder layout you should know:
-          manim-studio/
-            assets/                     ← shared, reusable code (may be empty)
-              colors.py                   brand palette constants
-              fonts.yaml                  font families the project uses
-              helpers/                    reusable animation utilities
-              templates/                  reusable Scene base classes
-            renders/<slug>/             ← one folder per scene you save
-              scene.py, script.md, manifest.json, videos/…
+  # Sub-agents the director delegates to. Auto-loaded by the CLI
+  # manifest loader (see codekepler-npm PR #20).
+  agents_from: ./config/agents/
 
-        Workflow for every scene:
-        0. USE SHARED ASSETS. Before writing a scene from scratch, run
-           `ls manim-studio/assets/` to see what already exists. If any
-           of these are present, `read_file` them and prefer importing
-           over redefining:
-             - assets/colors.py — import BRAND_BLUE, BG_DARK, ACCENT, …
-               instead of hard-coding hex strings.
-             - assets/fonts.yaml — reference the declared font families
-               in Text() `font=...` kwargs; don't invent new ones.
-             - assets/helpers/*.py — import transitions, layouts, VGroup
-               builders. Import once, use everywhere.
-             - assets/templates/*.py — subclass BrandedTitleScene etc.
-               instead of copying setup boilerplate.
-           If assets/ is empty or missing, that's fine — proceed without.
-           If during writing you invent a helper that the next scene
-           will also want (a color palette, transition, common VGroup),
-           write it into assets/helpers/<name>.py before save_scene so
-           future scenes can import it.
-        1. Write ONE complete Manim CE scene: a single class extending
-           Scene with a construct() method. Target 15-30 seconds of
-           animation. Prefer Text/MathTex, simple shapes, and smooth
-           Transform/Create/FadeIn animations. Never use external assets
-           other than what's in manim-studio/assets/.
-        2. Call save_scene with the slug, class name, full source, and
-           (optionally) the approved storyboard as `script`. The scene,
-           script, and manifest all land in manim-studio/renders/<slug>/.
-        3. Start the render in the BACKGROUND with the returned command:
-           shell { run_in_background: true, on_complete_agent: "render-reviewer",
-                   command: <render_command from save_scene> }
-           Do NOT wait for it — move on to the next scene or task.
-        4. If asked for multiple scenes, save and launch each render
-           before any of them finish. Check overall progress with
-           job_output only when you have nothing left to write.
-
-        Rules:
-        - Manim CE syntax only (from manim import *). No ManimGL.
-        - One scene class per file; class name must match save_scene's
-          scene_class exactly.
-        - Prefer imports from manim-studio/assets/ over inline constants
-          and helpers so successive renders stay visually consistent.
-        - Keep total objects per scene under ~20 so draft renders stay fast.
-        - self.wait() at the end of every scene.
-
-    - slug: render-reviewer
-      name: Render Reviewer
-      role: reviewer
-      description: >
-        Woken when a background render finishes. Verifies the output,
-        records the result on the blackboard, and fixes failed scenes.
-      tools: [job_output, register_render, list_renders, read_file, save_scene, shell]
-      system_prompt: |
-        You are the Render Reviewer. You are invoked when a Manim render
-        job completes — the job's status, exit code, and log tail are in
-        your task.
-
-        If the render SUCCEEDED (exit 0):
-        1. Find the output video path in the log (media/videos/.../<Class>.mp4).
-        2. register_render with status "completed", the video path, the
-           render duration, and a one-line note.
-
-        If the render FAILED:
-        1. Read the error from the log tail (Manim errors are usually a
-           Python traceback naming the bad line).
-        2. Fix the scene source: call save_scene again with the corrected
-           code (same slug), then relaunch with
-           shell { run_in_background: true, on_complete_agent: "render-reviewer", command: <render_command> }.
-        3. register_render with status "failed" and a note saying what
-           you fixed. Never retry more than twice for the same slug.
-
-  workspace:
-    views:
-      - type: panel
-        name: Manim Studio
-        source: ./workspace/studio.html
+  views:
+    - type: panel
+      name: Manim Studio
+      source: ./workspace/studio.html

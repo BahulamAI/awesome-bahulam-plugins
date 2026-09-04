@@ -1,8 +1,11 @@
 /**
- * save_scene — write a Manim CE scene to the render workspace and return
- * the background-render command. The agent (not this tool) launches the
- * render via shell run_in_background so the job lands in the CLI's job
- * registry (timeout, log spool, job_output, on_complete wake-up).
+ * render_scene — OSS implementation of the canonical render_scene tool.
+ * Same tool name + params as
+ * the SaaS Video Studio; different substrate — this impl writes the
+ * scene to local disk and returns the manim CLI command for the agent
+ * to launch via `shell run_in_background`. The SaaS impl POSTs to a
+ * Django render service that blocks-and-returns-URL. Both write the
+ * same manifest.json shape (see config/manifest.schema.json).
  *
  * Layout (this file writes into .bahulam/tmp/manim/manim-studio/ under
  * the current working directory):
