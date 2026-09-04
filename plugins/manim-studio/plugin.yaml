@@ -81,6 +81,14 @@ config:
           limit: { type: integer, description: "Max rows (default 20)" }
         required: []
 
+  # Entry/primary agent — the workspace's front door. Mirrors SaaS's
+  # workspace.yaml convention so codekepler-backend can consume the
+  # same file directly via git submodule. The director agent that
+  # orchestrates the plan → animator → reviewer chain.
+  workspace_agent: ./config/workspace.yaml
+
+  # Sub-agents the director delegates to. Auto-loaded by the CLI
+  # manifest loader (see codekepler-npm PR #20).
   agents_from: ./config/agents/
 
   workspace:

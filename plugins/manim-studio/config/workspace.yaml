@@ -1,5 +1,7 @@
-# agents/director.yaml — auto-loaded by manifest.mjs when plugin.yaml
-# declares `config.agents_from: ./config/agents/`.
+# config/workspace.yaml — primary/entry agent for manim-studio.
+# Mirrors the SaaS workspace-config convention (one workspace.yaml
+# per workspace, sub-agents under agents/). Loaded via plugin.yaml's
+# `config.workspace_agent: ./config/workspace.yaml` declaration.
 slug: director
 name: Video Director
 role: video_director
