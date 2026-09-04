@@ -13,12 +13,11 @@ metadata:
   author: BahulamAI
   repository: https://github.com/BahulamAI/awesome-bahulam-plugins
 
-spec:
+config:
   tools:
     - name: render_scene
       description: >
-        Canonical Bahulam render tool (see
-        config/tools/render-scene.tool.yaml). Writes a Manim CE scene to
+        Canonical Bahulam render tool. Writes a Manim CE scene to
         manim-studio/renders/<slug>/{scene.py, manifest.json[, script.md]}
         so the source, storyboard, manifest, and eventually the rendered
         video all live in one folder — inspectable from a plain file
@@ -82,11 +81,6 @@ spec:
           limit: { type: integer, description: "Max rows (default 20)" }
         required: []
 
-  # Agent definitions live one-per-file under config/agents/. The
-  # CLI's manifest loader auto-consumes every .yaml/.yml file in that
-  # directory (alphabetical order) and merges them into spec.agents at
-  # parse time — inline `agents:` entries would also be honored if
-  # added back below.
   agents_from: ./config/agents/
 
   workspace:

@@ -1,5 +1,5 @@
 # agents/animator.yaml — auto-loaded by manifest.mjs when plugin.yaml
-# declares `agents_from: ./config/agents/`.
+# declares `config.agents_from: ./config/agents/`.
 slug: animator
 name: Manim Animator
 role: specialist

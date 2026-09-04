@@ -1,5 +1,5 @@
 # agents/plan.yaml — auto-loaded by manifest.mjs when plugin.yaml
-# declares `agents_from: ./config/agents/`.
+# declares `config.agents_from: ./config/agents/`.
 slug: plan
 name: Video Planner
 role: plan

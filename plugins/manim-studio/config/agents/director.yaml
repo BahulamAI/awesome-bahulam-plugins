@@ -1,5 +1,5 @@
 # agents/director.yaml — auto-loaded by manifest.mjs when plugin.yaml
-# declares `agents_from: ./config/agents/`.
+# declares `config.agents_from: ./config/agents/`.
 slug: director
 name: Video Director
 role: video_director

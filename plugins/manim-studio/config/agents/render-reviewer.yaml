@@ -1,5 +1,5 @@
 # agents/render-reviewer.yaml — auto-loaded by manifest.mjs when
-# plugin.yaml declares `agents_from: ./config/agents/`.
+# plugin.yaml declares `config.agents_from: ./config/agents/`.
 slug: render-reviewer
 name: Render Reviewer
 role: reviewer

@@ -1,6 +1,6 @@
 /**
- * render_scene — OSS implementation of the canonical render_scene tool
- * (see config/tools/render-scene.tool.yaml). Same tool name + params as
+ * render_scene — OSS implementation of the canonical render_scene tool.
+ * Same tool name + params as
  * the SaaS Video Studio; different substrate — this impl writes the
  * scene to local disk and returns the manim CLI command for the agent
  * to launch via `shell run_in_background`. The SaaS impl POSTs to a
