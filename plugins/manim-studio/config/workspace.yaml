@@ -171,6 +171,5 @@ tools:
   - list_renders
   - read_file
   - list_files
-  - register_render
   - shell
   - job_output
