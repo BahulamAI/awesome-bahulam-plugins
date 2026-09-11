@@ -1,4 +1,4 @@
-apiVersion: agent.framework.v1
+apiVersion: agent.framework/v1
 kind: SubAgent
 metadata:
   slug: card-generator
