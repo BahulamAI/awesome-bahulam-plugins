@@ -2,6 +2,15 @@
   "$schema": "https://docs.bahulam.ai/schemas/plugin-registry-1.json",
   "plugins": [
     {
+      "name": "flashcards",
+      "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
+      "ref": "main",
+      "subdir": "plugins/flashcards",
+      "description": "Flashcards from a document or a topic, with an SM-2 review schedule — due dates, ease factors and review history in declared SQLite tables, plus a live study console",
+      "author": "BahulamAI",
+      "tags": ["education", "flashcards", "spaced-repetition", "state"]
+    },
+    {
       "name": "hello-mcp",
       "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
       "ref": "main",

@@ -1,0 +1,545 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Flashcards</title>
+<style>
+:root{--bg:#FFFDF7;--panel:#fff;--border:rgba(27,27,27,.10);--fg:#1B1B1B;--muted:rgba(27,27,27,.55);--brand:#0891B2;--ok:#047857;--err:#B91C1C;--warn:#B45309;--mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.55 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;padding:24px}
+h1{font-size:20px;margin:0 0 4px}
+p.lede{color:var(--muted);margin:0 0 24px;max-width:760px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:14px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px}
+h2{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--brand);margin:0 0 10px;display:flex;align-items:center;gap:8px}
+h2 .live{font-weight:400;letter-spacing:0;text-transform:none;color:var(--muted);font-size:10px}
+.row{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px}
+label{display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted);flex:1;min-width:0}
+input,textarea,select{border:1px solid var(--border);border-radius:6px;padding:6px 8px;font:13px var(--mono);background:#fff;color:var(--fg);width:100%}
+input:focus,textarea:focus,select:focus{outline:1px solid var(--brand);border-color:var(--brand)}
+button{border:0;background:var(--fg);color:#fff;border-radius:6px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer}
+button:hover{background:#333}
+button.ghost{background:transparent;color:var(--fg);border:1px solid var(--border)}
+button.ghost:hover{background:#F7F5EF}
+button.mini{padding:2px 8px;font-size:11px;font-weight:500}
+button:disabled{opacity:.5;cursor:default}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(88px,1fr));gap:10px}
+.stat{background:#FBFAF6;border:1px solid var(--border);border-radius:8px;padding:10px}
+.stat .n{font:600 22px/1.1 var(--mono);letter-spacing:-.02em}
+.stat .l{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-top:3px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{padding:6px 8px;text-align:left;color:var(--muted);border-bottom:1px solid var(--border);font-weight:600;font-size:11px}
+td{padding:5px 8px;border-bottom:1px solid #F0EFEA;vertical-align:top}
+td.num{text-align:right;font-family:var(--mono);color:var(--muted)}
+.empty-row td{padding:12px;color:var(--muted)}
+.miss{color:var(--err);font-weight:600}
+.status{font-size:11px;color:var(--muted);margin-top:6px;min-height:16px}
+.status.ok{color:var(--ok)}
+.status.err{color:var(--err)}
+.pill{display:inline-block;padding:1px 6px;border-radius:99px;font-size:10px;background:#F1EFE8;color:var(--muted);font-family:var(--mono)}
+.pill.due{background:#FCEAEA;color:var(--err)}
+.pill.new{background:#E7F5EE;color:var(--ok)}
+.flip{background:#FBFAF6;border:1px solid var(--border);border-radius:10px;padding:22px;min-height:124px;display:flex;flex-direction:column;justify-content:center;gap:12px;margin-bottom:10px}
+.flip .q{font-size:17px;font-weight:600;line-height:1.4}
+.flip .a{font-size:15px;color:var(--brand);border-top:1px dashed var(--border);padding-top:10px}
+.flip .ex{font-size:12px;color:var(--muted)}
+.grades{display:flex;gap:8px;flex-wrap:wrap}
+footer{margin-top:24px;font-size:11px;color:var(--muted)}
+footer code{background:#F7F5EF;padding:1px 5px;border-radius:3px;font-family:var(--mono)}
+</style>
+</head>
+<body>
+<h1>Flashcards — the study console.</h1>
+<p class="lede">
+  This panel is served by the <code>flashcards</code> plugin and reads the same
+  SQLite state the tutor writes to. Everything here is live: grading a card below
+  and asking the agent to grade one in the chat both update the same schedule,
+  and the numbers repaint either way without a click.
+</p>
+
+<div class="grid">
+
+  <!-- 1 ─ Study: the flip surface. Writes through record_review. -->
+  <div class="card" style="grid-column:1/-1">
+    <h2>Study <span class="live" id="sLive">· connecting…</span></h2>
+    <div class="row">
+      <label>deck<select id="sDeck"></select></label>
+      <label style="flex:0 0 160px">queue
+        <select id="sMode">
+          <option value="due">due now</option>
+          <option value="new">never seen</option>
+          <option value="all">whole deck</option>
+        </select>
+      </label>
+      <button id="sStart">Start / reload</button>
+    </div>
+
+    <div class="flip">
+      <div class="q" id="sQuestion">Pick a deck and press Start.</div>
+      <div class="a" id="sAnswer" hidden></div>
+      <div class="ex" id="sExplanation" hidden></div>
+    </div>
+
+    <div class="row" style="margin-bottom:0">
+      <button id="sReveal" class="ghost">Reveal answer</button>
+      <span class="grades" id="sGrades" hidden>
+        <button class="ghost" data-rating="0">Again</button>
+        <button class="ghost" data-rating="3">Hard</button>
+        <button class="ghost" data-rating="4">Good</button>
+        <button class="ghost" data-rating="5">Easy</button>
+      </span>
+    </div>
+    <div class="status" id="sStatus"></div>
+  </div>
+
+  <!-- 2 ─ Decks: generated read tool list_decks + create_deck / update_deck -->
+  <div class="card">
+    <h2>Decks <span class="live">· tools: <code>list_decks</code>, <code>create_deck</code></span></h2>
+    <table>
+      <thead><tr><th>#</th><th>deck</th><th>source</th><th></th></tr></thead>
+      <tbody id="dBody"><tr class="empty-row"><td colspan="4">loading…</td></tr></tbody>
+    </table>
+    <div class="row" style="margin-top:12px">
+      <label>new deck<input id="dName" placeholder="HTTP caching"></label>
+      <button id="dGo">Create</button>
+    </div>
+    <div class="status" id="dStatus"></div>
+  </div>
+
+  <!-- 3 ─ Stats: authored aggregate tool get_study_stats -->
+  <div class="card">
+    <h2>Progress <span class="live">· tool: <code>get_study_stats</code></span></h2>
+    <div class="stats">
+      <div class="stat"><div class="n" id="tDue">–</div><div class="l">due now</div></div>
+      <div class="stat"><div class="n" id="tNew">–</div><div class="l">never seen</div></div>
+      <div class="stat"><div class="n" id="tWeek">–</div><div class="l">next 7 days</div></div>
+      <div class="stat"><div class="n" id="tCards">–</div><div class="l">cards</div></div>
+      <div class="stat"><div class="n" id="tReviews">–</div><div class="l">reviews</div></div>
+      <div class="stat"><div class="n" id="tEase">–</div><div class="l">avg ease</div></div>
+      <div class="stat"><div class="n" id="tRetention">–</div><div class="l">retention</div></div>
+      <div class="stat"><div class="n" id="tToday">–</div><div class="l">today</div></div>
+    </div>
+    <table style="margin-top:12px">
+      <thead><tr><th>rating</th><th style="text-align:right">reviews</th></tr></thead>
+      <tbody id="stRatings"><tr class="empty-row"><td colspan="2">no reviews yet</td></tr></tbody>
+    </table>
+    <div class="status" id="stStatus"></div>
+  </div>
+
+  <!-- 4 ─ Queue: generated read tool list_cards + reset_card -->
+  <div class="card" style="grid-column:1/-1">
+    <h2>Cards <span class="live">· tools: <code>list_cards</code>, <code>reset_card</code></span></h2>
+    <div class="row">
+      <label>deck<select id="qDeck"></select></label>
+      <button id="qReload" class="ghost">Reload</button>
+    </div>
+    <table>
+      <thead><tr><th>#</th><th>question</th><th style="text-align:right">reps</th><th style="text-align:right">interval</th><th>due</th><th></th></tr></thead>
+      <tbody id="qBody"><tr class="empty-row"><td colspan="6">loading…</td></tr></tbody>
+    </table>
+    <div class="status" id="qStatus"></div>
+  </div>
+
+  <!-- 5 ─ Live activity: the study_log stream, straight from state.db -->
+  <div class="card" style="grid-column:1/-1">
+    <h2>Live activity <span class="live">· stream: <code>study_log</code></span></h2>
+    <p style="margin:0 0 10px;color:var(--muted);font-size:12px">
+      The last few events written to
+      <code>~/.bahulam/data/flashcards/state.db</code>. Grade a card in the chat
+      and watch this update by itself.
+    </p>
+    <table>
+      <thead><tr><th>#</th><th>time</th><th>event</th><th>deck</th><th style="text-align:right">rating</th></tr></thead>
+      <tbody id="aBody"><tr class="empty-row"><td colspan="5">loading…</td></tr></tbody>
+    </table>
+    <div class="row" style="margin:10px 0 0"><button class="ghost" id="aReload">Reload</button></div>
+  </div>
+
+</div>
+
+<footer>
+  Plugin: <code>flashcards</code> · generated reads: <code>list_decks</code>,
+  <code>list_cards</code>, <code>list_due_cards</code>, <code>list_reviews</code> ·
+  writes: <code>create_deck</code>, <code>bulk_add_cards</code>, <code>record_review</code>,
+  <code>reset_card</code>, <code>update_deck</code>, <code>get_study_stats</code> ·
+  state: <code>~/.bahulam/data/flashcards/state.db</code>
+</footer>
+
+<script>
+// The workspace embeds every plugin view in a sandboxed iframe and passes the
+// local-session token via the query string. We use it to call /api/tools/execute
+// (the same endpoint the agent uses) and /api/plugin-state/<plugin> for raw reads.
+const token = new URLSearchParams(location.search).get('token') || '';
+const PLUGIN = 'flashcards';
+
+async function tool(name, args) {
+  const res = await fetch('/api/tools/execute', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Bahulam-Local-Token': token },
+    body: JSON.stringify({ name, args }),
+  });
+  const body = await res.json();
+  if (!res.ok || body.ok === false) throw new Error(body.error || body.message || 'request failed');
+  const r = body.result;
+  if (r && r.success === false) throw new Error(String(r.output));
+  return r && r.output !== undefined ? r.output : r;
+}
+
+// Raw state access. This view is the plugin's own code, so reading the stream
+// here is the same trust level as the tool modules.
+async function state(op, extra = {}) {
+  const res = await fetch('/api/plugin-state/' + PLUGIN, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Bahulam-Local-Token': token },
+    body: JSON.stringify({ op, ...extra }),
+  });
+  const body = await res.json();
+  if (!res.ok || body.ok === false) throw new Error(body.error || body.message || 'state op failed');
+  return body.result;
+}
+
+// Questions and answers are authored by the model, so they must never be
+// interpolated raw into innerHTML.
+function esc(v) {
+  return String(v ?? '').replace(/[&<>"']/g, c => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+}
+function fmtTime(iso) { return String(iso || '').replace('T', ' ').slice(0, 16); }
+function dayCount(n) { return n === 1 ? '1 day' : n + ' days'; }
+function emptyRow(colspan, msg) {
+  return `<tr class="empty-row"><td colspan="${colspan}">${esc(msg)}</td></tr>`;
+}
+function setStatus(el, cls, text) {
+  el.className = 'status' + (cls ? ' ' + cls : '');
+  el.textContent = text;
+}
+function selectedDeckId(selectId) {
+  const v = document.getElementById(selectId).value;
+  return v ? Number(v) : 0;
+}
+
+let decks = [];
+let queue = [];
+let cursor = 0;
+let showing = false;
+
+// ── Study surface (tool: record_review) ──────────────────────────────
+function renderCard() {
+  const q = document.getElementById('sQuestion');
+  const a = document.getElementById('sAnswer');
+  const ex = document.getElementById('sExplanation');
+  const rev = document.getElementById('sReveal');
+  const grades = document.getElementById('sGrades');
+  const statusEl = document.getElementById('sStatus');
+
+  if (!queue.length) {
+    q.textContent = 'Nothing queued — pick a deck and press Start.';
+    a.hidden = true; ex.hidden = true; rev.disabled = true; grades.hidden = true;
+    setStatus(statusEl, '', '');
+    return;
+  }
+  if (cursor >= queue.length) {
+    q.textContent = 'Queue finished.';
+    a.hidden = true; ex.hidden = true; rev.disabled = true; grades.hidden = true;
+    setStatus(statusEl, 'ok', `${queue.length} card${queue.length === 1 ? '' : 's'} graded`);
+    return;
+  }
+
+  const card = queue[cursor];
+  q.textContent = card.question;
+  a.textContent = card.answer;
+  a.hidden = !showing;
+  ex.textContent = card.explanation || '';
+  ex.hidden = !showing || !card.explanation;
+  rev.disabled = showing;
+  rev.textContent = showing ? 'Answer shown' : 'Reveal answer';
+  grades.hidden = !showing;
+  setStatus(statusEl, '', `card ${cursor + 1} of ${queue.length}`);
+}
+
+async function startSession() {
+  const statusEl = document.getElementById('sStatus');
+  const deckId = selectedDeckId('sDeck');
+  if (!deckId) { setStatus(statusEl, 'err', 'create a deck first'); return; }
+
+  const mode = document.getElementById('sMode').value;
+  setStatus(statusEl, '', 'loading…');
+  try {
+    if (mode === 'due') {
+      // The generated tool binds a single predicate (`due_at <= ?`), so the
+      // deck narrowing happens here rather than in a second declaration.
+      const due = await tool('list_due_cards', { as_of: new Date().toISOString(), limit: 500 });
+      queue = due.filter(c => Number(c.deck_id) === deckId);
+    } else {
+      const cards = await tool('list_cards', { deck_id: deckId, limit: 500 });
+      queue = mode === 'new' ? cards.filter(c => Number(c.reps) === 0) : cards;
+    }
+    cursor = 0;
+    showing = false;
+    renderCard();
+  } catch (err) {
+    queue = [];
+    renderCard();
+    setStatus(statusEl, 'err', err.message);
+  }
+}
+
+document.getElementById('sReveal').addEventListener('click', () => {
+  showing = true;
+  renderCard();
+});
+
+document.getElementById('sStart').addEventListener('click', startSession);
+
+document.getElementById('sGrades').addEventListener('click', async (ev) => {
+  const btn = ev.target.closest('button[data-rating]');
+  if (!btn) return;
+  const card = queue[cursor];
+  if (!card) return;
+
+  const statusEl = document.getElementById('sStatus');
+  const rating = Number(btn.dataset.rating);
+  document.getElementById('sGrades').querySelectorAll('button').forEach(b => { b.disabled = true; });
+  try {
+    const result = await tool('record_review', { card_id: Number(card.id), rating });
+    cursor += 1;
+    showing = false;
+    renderCard();
+    setStatus(statusEl, 'ok',
+      `${rating >= 3 ? 'passed' : 'failed'} · next in ${dayCount(Number(result.interval_days))}`);
+    loadStats();
+    loadActivity();
+    loadQueue();
+  } catch (err) {
+    setStatus(statusEl, 'err', err.message);
+  } finally {
+    document.getElementById('sGrades').querySelectorAll('button').forEach(b => { b.disabled = false; });
+  }
+});
+
+// ── Decks (tools: list_decks, create_deck, update_deck) ──────────────
+async function loadDecks() {
+  const body = document.getElementById('dBody');
+  const picker = document.getElementById('sDeck');
+  const qPicker = document.getElementById('qDeck');
+  try {
+    decks = await tool('list_decks', { archived: 0, limit: 100 });
+
+    body.innerHTML = decks.length
+      ? decks.map(d => `<tr>
+          <td class="num">${d.id}</td>
+          <td>${esc(d.name)}</td>
+          <td><span class="pill">${esc(d.source_type || 'topic')}</span></td>
+          <td style="white-space:nowrap"><button class="ghost mini" data-archive="${d.id}">archive</button></td>
+        </tr>`).join('')
+      : emptyRow(4, 'no decks yet — create one below');
+
+    const options = decks.length
+      ? decks.map(d => `<option value="${d.id}">${esc(d.name)}</option>`).join('')
+      : '<option value="">no decks yet</option>';
+
+    const keepStudy = picker.value;
+    picker.innerHTML = options;
+    if (keepStudy && decks.some(d => String(d.id) === keepStudy)) picker.value = keepStudy;
+
+    const keepQueue = qPicker.value;
+    qPicker.innerHTML = options;
+    if (keepQueue && decks.some(d => String(d.id) === keepQueue)) qPicker.value = keepQueue;
+  } catch (err) {
+    body.innerHTML = emptyRow(4, err.message);
+    picker.innerHTML = '<option value="">decks unavailable</option>';
+    qPicker.innerHTML = '<option value="">decks unavailable</option>';
+  }
+}
+
+document.getElementById('dGo').addEventListener('click', async () => {
+  const statusEl = document.getElementById('dStatus');
+  const name = document.getElementById('dName').value.trim();
+  if (!name) { setStatus(statusEl, 'err', 'a deck needs a name'); return; }
+  try {
+    const created = await tool('create_deck', { name });
+    document.getElementById('dName').value = '';
+    setStatus(statusEl, 'ok', `✓ deck #${created.deck_id} created`);
+    await loadDecks();
+    loadStats();
+    loadActivity();
+  } catch (err) {
+    setStatus(statusEl, 'err', err.message);
+  }
+});
+
+document.getElementById('dBody').addEventListener('click', async (ev) => {
+  const btn = ev.target.closest('button[data-archive]');
+  if (!btn) return;
+  const statusEl = document.getElementById('dStatus');
+  btn.disabled = true;
+  try {
+    const done = await tool('update_deck', { deck_id: Number(btn.dataset.archive), archived: 1 });
+    setStatus(statusEl, 'ok', `✓ "${done.name}" archived — cards and history kept`);
+    await loadDecks();
+    loadStats();
+    loadQueue();
+    loadActivity();
+  } catch (err) {
+    setStatus(statusEl, 'err', err.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ── Progress (tool: get_study_stats) ─────────────────────────────────
+async function loadStats() {
+  const statusEl = document.getElementById('stStatus');
+  const deckId = selectedDeckId('qDeck');
+  try {
+    const s = await tool('get_study_stats', deckId ? { deck_id: deckId } : {});
+    document.getElementById('tDue').textContent = s.due_now;
+    document.getElementById('tNew').textContent = s.new_cards;
+    document.getElementById('tWeek').textContent = s.due_this_week;
+    document.getElementById('tCards').textContent = s.cards;
+    document.getElementById('tReviews').textContent = s.reviews;
+    document.getElementById('tEase').textContent = s.average_ease_factor ?? '–';
+    document.getElementById('tRetention').textContent = s.retention_pct == null ? '–' : s.retention_pct + '%';
+    document.getElementById('tToday').textContent = s.reviewed_today;
+
+    document.getElementById('stRatings').innerHTML = s.reviews_by_rating.length
+      ? s.reviews_by_rating.map(r => `<tr>
+          <td>${esc(ratingLabel(r.rating))}</td>
+          <td class="num">${r.count}</td>
+        </tr>`).join('')
+      : emptyRow(2, 'no reviews yet');
+
+    setStatus(statusEl, '', s.last_reviewed_at ? 'last reviewed: ' + fmtTime(s.last_reviewed_at) : 'nothing reviewed yet');
+  } catch (err) {
+    setStatus(statusEl, 'err', err.message);
+  }
+}
+
+function ratingLabel(rating) {
+  if (rating <= 2) return `${rating} · failed`;
+  if (rating === 3) return '3 · hard';
+  if (rating === 4) return '4 · good';
+  return '5 · easy';
+}
+
+// ── Card list (tools: list_cards, reset_card) ────────────────────────
+async function loadQueue() {
+  const body = document.getElementById('qBody');
+  const statusEl = document.getElementById('qStatus');
+  const deckId = selectedDeckId('qDeck');
+  if (!deckId) { body.innerHTML = emptyRow(6, 'no deck selected'); setStatus(statusEl, '', ''); return; }
+  try {
+    const nowIso = new Date().toISOString();
+    const cards = await tool('list_cards', { deck_id: deckId, limit: 200 });
+    body.innerHTML = cards.length
+      ? cards.map(c => {
+          const due = String(c.due_at) <= nowIso;
+          return `<tr>
+            <td class="num">${c.id}</td>
+            <td>${esc(c.question)}</td>
+            <td class="num">${c.reps}</td>
+            <td class="num">${c.interval_days === 0 ? 'new' : dayCount(Number(c.interval_days))}</td>
+            <td><span class="pill ${due ? 'due' : 'new'}">${due ? 'due' : fmtTime(c.due_at)}</span></td>
+            <td style="white-space:nowrap"><button class="ghost mini" data-reset="${c.id}">reset</button></td>
+          </tr>`;
+        }).join('')
+      : emptyRow(6, 'this deck has no cards yet — ask the tutor to generate some');
+    setStatus(statusEl, 'ok', `${cards.length} card${cards.length === 1 ? '' : 's'}`);
+  } catch (err) {
+    body.innerHTML = emptyRow(6, err.message);
+    setStatus(statusEl, 'err', '✗ list_cards failed');
+  }
+}
+
+document.getElementById('qBody').addEventListener('click', async (ev) => {
+  const btn = ev.target.closest('button[data-reset]');
+  if (!btn) return;
+  const statusEl = document.getElementById('qStatus');
+  btn.disabled = true;
+  try {
+    const done = await tool('reset_card', { card_id: Number(btn.dataset.reset) });
+    setStatus(statusEl, 'ok', `✓ card #${done.card_id} reset — ${done.reviews_kept} review(s) kept`);
+    loadQueue();
+    loadStats();
+    loadActivity();
+  } catch (err) {
+    setStatus(statusEl, 'err', err.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+document.getElementById('qDeck').addEventListener('change', () => { loadQueue(); loadStats(); });
+document.getElementById('qReload').addEventListener('click', () => { loadQueue(); loadStats(); });
+
+// ── Live activity (stream: study_log) ────────────────────────────────
+async function loadActivity() {
+  const body = document.getElementById('aBody');
+  try {
+    const rows = await state('list', { stream: 'study_log', limit: 20, order: 'desc' });
+    body.innerHTML = rows.length
+      ? rows.map(r => {
+          const p = r.payload || {};
+          return `<tr>
+            <td class="num">${r.id}</td>
+            <td class="num">${fmtTime(r.created_at)}</td>
+            <td>${esc(p.event || '')}</td>
+            <td>${p.deck ? `<span class="pill">${esc(p.deck)}</span>` : ''}</td>
+            <td class="num">${p.rating === undefined ? '' : p.rating}</td>
+          </tr>`;
+        }).join('')
+      : emptyRow(5, 'no activity yet — grade a card in the chat');
+  } catch (err) {
+    body.innerHTML = emptyRow(5, err.message);
+  }
+}
+
+document.getElementById('aReload').addEventListener('click', loadActivity);
+
+// ── SSE: the workspace's shared event stream ─────────────────────────
+// The panel is a live shared canvas: it must repaint when the agent grades a
+// card in the chat, not only when someone clicks here. We accept both the
+// precise event for this plugin and the server's coarse "something changed"
+// pulse, which is what arrives when another process wrote our state.db.
+function isOurs(evt) {
+  if (!evt || typeof evt !== 'object') return false;
+  if (evt.plugin === PLUGIN || evt.target === PLUGIN) return true;
+  if (evt.kind === '*') return !evt.target || evt.target === PLUGIN;
+  return false;
+}
+
+let reloadTimer = null;
+function scheduleReload() {
+  if (reloadTimer) clearTimeout(reloadTimer);
+  reloadTimer = setTimeout(() => {
+    loadDecks();
+    loadStats();
+    loadQueue();
+    loadActivity();
+  }, 200);
+}
+
+let live = document.getElementById('sLive');
+try {
+  const es = new EventSource('/api/events?token=' + encodeURIComponent(token));
+  es.addEventListener('open', () => { live.textContent = '· live'; });
+  es.addEventListener('error', () => { live.textContent = '· reconnecting…'; });
+  es.addEventListener('plugin_state_changed', (ev) => {
+    let evt = {};
+    try { evt = JSON.parse(ev.data || '{}'); } catch { /* ignore malformed frame */ }
+    if (isOurs(evt)) scheduleReload();
+  });
+} catch { /* SSE unsupported → the poll below still keeps the panel live */ }
+
+// Insurance, not the primary path: if the SSE frame shape ever changes, a slow
+// poll still satisfies "the panel is a live shared canvas".
+setInterval(scheduleReload, 30000);
+
+// Initial paint.
+loadDecks().then(() => { loadStats(); loadQueue(); });
+loadActivity();
+renderCard();
+</script>
+</body>
+</html>
