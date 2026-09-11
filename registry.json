@@ -11,6 +11,15 @@
       "tags": ["data", "etl", "csv", "sqlite", "quality", "state"]
     },
     {
+      "name": "excalidraw-spec",
+      "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
+      "ref": "main",
+      "subdir": "plugins/excalidraw-spec",
+      "description": "Scans a repository, draws its architecture from real parsed imports, and exports it as a genuine .excalidraw document, a Mermaid diagram or an onboarding spec — the agent names the layers, the scanner supplies the evidence",
+      "author": "BahulamAI",
+      "tags": ["architecture", "excalidraw", "diagram", "documentation", "onboarding", "state"]
+    },
+    {
       "name": "flashcards",
       "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
       "ref": "main",
