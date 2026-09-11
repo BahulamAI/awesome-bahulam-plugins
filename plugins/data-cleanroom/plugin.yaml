@@ -1,0 +1,504 @@
+apiVersion: bahulam.plugin/1
+kind: Plugin
+metadata:
+  name: data-cleanroom
+  version: 1.0.0
+  description: >
+    Turns messy tabular files into a typed, queryable SQLite warehouse plus a
+    computed data-quality report. Deterministic parsing (quoted delimiters,
+    embedded newlines, BOM, delimiter sniffing), reproducible type inference
+    with per-column confidence, versioned normalization recipes, full
+    provenance (sha256 + physical line numbers), a quarantine for every row
+    that will not coerce, and idempotent reloads. Reference implementation of
+    config.state: a visible catalog over an invisible dataset.
+  author: BahulamAI
+  repository: https://github.com/BahulamAI/awesome-bahulam-plugins
+
+config:
+  # ── Declared state (the CATALOG) ────────────────────────────────────
+  # What is declared here is bookkeeping ABOUT the datasets: what was loaded,
+  # from where, with which schema, and what was wrong with it. The rows
+  # themselves deliberately live in a separate warehouse file owned by this
+  # plugin's handlers, so they can never be pulled into the agent's automatic
+  # context and the CLI's own migrations never touch them.
+  #
+  #   tables          created on open, migrated additively on version bump
+  #   context_always  injected into the agent context every turn
+  #   context_tools   auto-generated read-only tools the agent can call
+  state:
+    tables:
+      - name: datasets
+        columns:
+          - { name: id, type: INTEGER, primary: true, autoincrement: true }
+          - { name: name, type: TEXT, not_null: true }
+          - { name: table_name, type: TEXT, not_null: true }
+          - { name: quarantine_table_name, type: TEXT, not_null: true }
+          - { name: status, type: TEXT, not_null: true, default: "'created'" }
+          - { name: row_count, type: INTEGER, not_null: true, default: "0" }
+          - { name: accepted_count, type: INTEGER, not_null: true, default: "0" }
+          - { name: rejected_count, type: INTEGER, not_null: true, default: "0" }
+          - { name: schema_hash, type: TEXT }
+          - { name: created_at, type: TEXT, not_null: true }
+          - { name: updated_at, type: TEXT, not_null: true }
+        indexes:
+          - { columns: [name], unique: true }
+          - { columns: [status] }
+
+      # Immutable provenance: every load gets its own row, so re-ingesting a
+      # changed file ADDS history instead of overwriting it.
+      - name: sources
+        columns:
+          - { name: id, type: INTEGER, primary: true, autoincrement: true }
+          - { name: dataset_id, type: INTEGER, not_null: true, references: "datasets(id)" }
+          - { name: path, type: TEXT, not_null: true }
+          - { name: sha256, type: TEXT, not_null: true }
+          - { name: size_bytes, type: INTEGER, not_null: true, default: "0" }
+          - { name: mtime_ms, type: INTEGER }
+          - { name: format, type: TEXT, not_null: true, default: "'csv'" }
+          - { name: encoding, type: TEXT, not_null: true, default: "'utf-8'" }
+          - { name: delimiter, type: TEXT }
+          - { name: header_mode, type: TEXT }
+          - { name: source_metadata, type: TEXT, not_null: true, default: "'{}'" }
+          - { name: created_at, type: TEXT, not_null: true }
+        indexes:
+          - { columns: [dataset_id] }
+          - { columns: [dataset_id, sha256] }
+
+      # The accepted schema. `inferred_type` and `selected_type` are both kept
+      # because "what the data looks like" and "what we decided" are different
+      # facts, and the gap between them is where overrides live.
+      - name: columns
+        columns:
+          - { name: id, type: INTEGER, primary: true, autoincrement: true }
+          - { name: dataset_id, type: INTEGER, not_null: true, references: "datasets(id)" }
+          - { name: ordinal, type: INTEGER, not_null: true }
+          - { name: source_name, type: TEXT, not_null: true }
+          - { name: column_name, type: TEXT, not_null: true }
+          - { name: inferred_type, type: TEXT, not_null: true }
+          - { name: selected_type, type: TEXT, not_null: true }
+          - { name: confidence, type: REAL, not_null: true, default: "0" }
+          - { name: candidate_types, type: TEXT, not_null: true, default: "'{}'" }
+          - { name: nullable, type: INTEGER, not_null: true, default: "1" }
+          - { name: is_key_candidate, type: INTEGER, not_null: true, default: "0" }
+          - { name: schema_reason, type: TEXT }
+          - { name: created_at, type: TEXT, not_null: true }
+          - { name: updated_at, type: TEXT, not_null: true }
+        indexes:
+          - { columns: [dataset_id, ordinal], unique: true }
+          - { columns: [dataset_id] }
+
+      - name: issues
+        columns:
+          - { name: id, type: INTEGER, primary: true, autoincrement: true }
+          - { name: dataset_id, type: INTEGER, not_null: true, references: "datasets(id)" }
+          - { name: load_run_id, type: INTEGER }
+          - { name: column_id, type: INTEGER }
+          - { name: issue_type, type: TEXT, not_null: true }
+          - { name: severity, type: TEXT, not_null: true }
+          - { name: count, type: INTEGER, not_null: true, default: "0" }
+          - { name: sample_lines, type: TEXT }
+          - { name: details, type: TEXT, not_null: true, default: "''" }
+          - { name: created_at, type: TEXT, not_null: true }
+        indexes:
+          - { columns: [dataset_id] }
+          - { columns: [severity] }
+
+      - name: load_runs
+        columns:
+          - { name: id, type: INTEGER, primary: true, autoincrement: true }
+          - { name: dataset_id, type: INTEGER, not_null: true, references: "datasets(id)" }
+          - { name: source_id, type: INTEGER, not_null: true, references: "sources(id)" }
+          - { name: transform_version, type: INTEGER, not_null: true, default: "1" }
+          - { name: schema_hash, type: TEXT, not_null: true }
+          - { name: status, type: TEXT, not_null: true, default: "'running'" }
+          - { name: started_at, type: TEXT, not_null: true }
+          - { name: finished_at, type: TEXT }
+          - { name: rows_seen, type: INTEGER, not_null: true, default: "0" }
+          - { name: rows_loaded, type: INTEGER, not_null: true, default: "0" }
+          - { name: rows_rejected, type: INTEGER, not_null: true, default: "0" }
+          - { name: error, type: TEXT }
+          - { name: progress, type: REAL, not_null: true, default: "0" }
+        indexes:
+          - { columns: [dataset_id] }
+          - { columns: [status] }
+          - { columns: [dataset_id, schema_hash] }
+
+      # Versioned normalization recipes — what makes a load reproducible
+      # rather than a one-shot. A new version is created, never edited.
+      - name: transforms
+        columns:
+          - { name: id, type: INTEGER, primary: true, autoincrement: true }
+          - { name: dataset_id, type: INTEGER, not_null: true, references: "datasets(id)" }
+          - { name: version, type: INTEGER, not_null: true }
+          - { name: column_name, type: TEXT, not_null: true }
+          - { name: trim_mode, type: TEXT, not_null: true, default: "'outer'" }
+          - { name: empty_tokens, type: TEXT, not_null: true, default: "'[]'" }
+          - { name: null_tokens, type: TEXT, not_null: true, default: "'[]'" }
+          - { name: boolean_true_tokens, type: TEXT, not_null: true, default: "'[]'" }
+          - { name: boolean_false_tokens, type: TEXT, not_null: true, default: "'[]'" }
+          - { name: decimal_separator, type: TEXT, not_null: true, default: "'.'" }
+          - { name: thousands_separator, type: TEXT }
+          - { name: currency_symbols, type: TEXT, not_null: true, default: "'[]'" }
+          - { name: date_formats, type: TEXT, not_null: true, default: "'[]'" }
+          - { name: explicit_type, type: TEXT }
+          - { name: created_at, type: TEXT, not_null: true }
+          - { name: created_by, type: TEXT, not_null: true, default: "'tool'" }
+        indexes:
+          - { columns: [dataset_id, version, column_name], unique: true }
+          - { columns: [dataset_id] }
+
+      - name: quality_reports
+        columns:
+          - { name: id, type: INTEGER, primary: true, autoincrement: true }
+          - { name: dataset_id, type: INTEGER, not_null: true, references: "datasets(id)" }
+          - { name: load_run_id, type: INTEGER, not_null: true }
+          - { name: computed_at, type: TEXT, not_null: true }
+          - { name: full_scan, type: INTEGER, not_null: true, default: "1" }
+          - { name: metrics_json, type: TEXT, not_null: true }
+          - { name: summary, type: TEXT, not_null: true }
+        indexes:
+          - { columns: [dataset_id] }
+
+    # ── Tier 1: injected every turn ─────────────────────────────────
+    # Nine numbers about the WORKSPACE, never a row of user data. The whole
+    # point is that a returning session knows what it was working on without
+    # paying to re-read a million rows on every turn.
+    context_always:
+      - cleanroom_status                   # { active_dataset, dataset_id, rows, findings }
+      - { stream: cleanroom_log, limit: 3 }
+
+    # ── Tier 2: generated read-only tools ───────────────────────────
+    # Catalog reads only. These reach DECLARED tables, so raw rows are never
+    # exposed automatically — data is fetched deliberately via query_dataset.
+    context_tools:
+      - name: list_datasets
+        table: datasets
+        description: >
+          List datasets in the catalog: name, status, row counts, and the
+          warehouse table holding the rows. Pass `status` to filter. Read-only.
+        parameters:
+          type: object
+          properties:
+            status:
+              type: string
+              description: "Only datasets in this state (created, loaded, profiled, failed)."
+            limit:
+              type: integer
+              description: "Max rows to return (default 50)."
+        where: "status = ?"
+        params: [status]
+
+      - name: list_columns
+        table: columns
+        description: >
+          List the accepted schema of a dataset: original header, normalized
+          column name, inferred vs selected type, and the inference confidence.
+          Read-only.
+        parameters:
+          type: object
+          properties:
+            dataset_id:
+              type: integer
+              description: "The dataset whose schema you want."
+            limit:
+              type: integer
+              description: "Max rows to return (default 50)."
+        where: "dataset_id = ?"
+        params: [dataset_id]
+
+      - name: list_issues
+        table: issues
+        description: >
+          List the computed data-quality findings for a dataset — null rates,
+          duplicates, constant columns, outliers — with severity and counts.
+          Read-only.
+        parameters:
+          type: object
+          properties:
+            dataset_id:
+              type: integer
+              description: "The dataset whose findings you want."
+            limit:
+              type: integer
+              description: "Max rows to return (default 50)."
+        where: "dataset_id = ?"
+        params: [dataset_id]
+
+      - name: list_load_runs
+        table: load_runs
+        description: >
+          List every load attempt for a dataset: when it ran, which recipe
+          version, how many rows were seen, loaded and rejected, and any error.
+          Read-only.
+        parameters:
+          type: object
+          properties:
+            dataset_id:
+              type: integer
+              description: "The dataset whose load history you want."
+            limit:
+              type: integer
+              description: "Max rows to return (default 50)."
+        where: "dataset_id = ?"
+        params: [dataset_id]
+
+      - name: list_reports
+        table: quality_reports
+        description: >
+          List the stored quality reports for a dataset, newest first. Each row
+          carries a one-line summary and the full metrics as JSON text — prefer
+          export_report for reading a report. Read-only.
+        parameters:
+          type: object
+          properties:
+            dataset_id:
+              type: integer
+              description: "The dataset whose reports you want."
+            limit:
+              type: integer
+              description: "Max rows to return (default 50)."
+        where: "dataset_id = ?"
+        params: [dataset_id]
+
+  # ── Tools (the write and compute side) ──────────────────────────────
+  # The generated tools above only READ the catalog. Everything that parses,
+  # types, loads, or computes is a module, because it is real logic — a CSV
+  # state machine, a coercer, a profiler — not a row fetch.
+  tools:
+    - name: probe_file
+      description: >
+        Inspect a data file before loading it: detected format, delimiter,
+        encoding, size, sha256, header row, sample rows, and every parse
+        warning with its physical line number. Writes nothing.
+      tool: ./tools/probe-file.mjs
+      parameters:
+        type: object
+        properties:
+          path:
+            type: string
+            description: "Path to the file to inspect (CSV, TSV, JSON, JSONL)."
+          delimiter:
+            type: string
+            description: "Force a delimiter instead of sniffing it (use \\t for tab)."
+          format:
+            type: string
+            enum: [csv, tsv, json, jsonl]
+            description: "Force the format instead of inferring it from the extension."
+          sample_rows:
+            type: integer
+            description: "How many sample rows to return (default 5, max 50)."
+        required: [path]
+
+    - name: preview_schema
+      description: >
+        Propose a typed schema for a file WITHOUT loading it: per-column
+        inferred type, confidence, the competing candidate types, and the
+        reason. Use this to show a schema for review, and to test
+        column_overrides before committing them.
+      tool: ./tools/preview-schema.mjs
+      parameters:
+        type: object
+        properties:
+          path:
+            type: string
+            description: "Path to the file to inspect."
+          delimiter:
+            type: string
+            description: "Force a delimiter instead of sniffing it (use \\t for tab)."
+          format:
+            type: string
+            enum: [csv, tsv, json, jsonl]
+            description: "Force the format."
+          sample_rows:
+            type: integer
+            description: "How many rows to sample when inferring (default 500)."
+          null_tokens:
+            type: array
+            items: { type: string }
+            description: "Extra strings to treat as null, e.g. [\"n/a\", \"unknown\"]."
+          column_overrides:
+            type: object
+            description: >
+              Per-column overrides keyed by column name, e.g.
+              {"zip": {"explicit_type": "TEXT"}}.
+        required: [path]
+
+    - name: load_dataset
+      description: >
+        Load a file into a typed warehouse table. Parses, infers or applies a
+        schema, coerces every value, and writes rows that will not coerce into
+        a quarantine table with their source line and the reason. Idempotent:
+        re-loading the same file with the same schema writes nothing and says
+        so.
+      tool: ./tools/load-dataset.mjs
+      parameters:
+        type: object
+        properties:
+          path:
+            type: string
+            description: "Path to the file to load."
+          name:
+            type: string
+            description: "Dataset name. Unique; also the basis of the warehouse table name."
+          delimiter:
+            type: string
+            description: "Force a delimiter instead of sniffing it (use \\t for tab)."
+          format:
+            type: string
+            enum: [csv, tsv, json, jsonl]
+            description: "Force the format."
+          sample_rows:
+            type: integer
+            description: "How many rows to sample when inferring types (default 500)."
+          null_tokens:
+            type: array
+            items: { type: string }
+            description: "Extra strings to treat as null."
+          column_overrides:
+            type: object
+            description: "Per-column type and token overrides, keyed by column name."
+          replace:
+            type: boolean
+            description: "Replace an existing dataset of this name. Required if it already exists with different contents."
+        required: [path, name]
+
+    - name: profile_dataset
+      description: >
+        Compute and store the data-quality report for a loaded dataset: null
+        rate, distinct counts, min/max/mean, duplicate rows, candidate keys,
+        constant columns, high cardinality and Tukey outliers, each as a
+        finding with severity and evidence.
+      tool: ./tools/profile-dataset.mjs
+      parameters:
+        type: object
+        properties:
+          dataset_id:
+            type: integer
+            description: "The dataset to profile."
+          full_scan:
+            type: boolean
+            description: "Set false to skip the scan-heavy metrics (min/max/mean, duplicates, outliers). Default true."
+        required: [dataset_id]
+
+    - name: query_dataset
+      description: >
+        Run a read-only SELECT against a loaded dataset's warehouse table and
+        return the rows. Only SELECT/WITH is accepted, a single statement, and
+        only this dataset's table may be named.
+      tool: ./tools/query-dataset.mjs
+      parameters:
+        type: object
+        properties:
+          dataset_id:
+            type: integer
+            description: "The dataset to query."
+          sql:
+            type: string
+            description: "A SELECT statement naming only this dataset's table, e.g. SELECT region, COUNT(*) AS n FROM dataset_1_sales GROUP BY region."
+          params:
+            type: array
+            description: "Positional ? bindings for the SQL."
+          limit:
+            type: integer
+            description: "Max rows to return (default 200, max 1000)."
+        required: [dataset_id, sql]
+
+    - name: get_quarantine
+      description: >
+        List the rows that could not be loaded, with the raw text of each, the
+        physical line it came from, and why it was rejected. Use this whenever
+        a load reported rejected rows — a rejected row is a fact about the
+        source file, not a lost row.
+      tool: ./tools/get-quarantine.mjs
+      parameters:
+        type: object
+        properties:
+          dataset_id:
+            type: integer
+            description: "The dataset whose rejected rows you want."
+          load_run_id:
+            type: integer
+            description: "Restrict to one load run. Omit for all of them."
+          limit:
+            type: integer
+            description: "Max rows to return (default 100, max 500)."
+          offset:
+            type: integer
+            description: "Skip this many rejected rows."
+        required: [dataset_id]
+
+    - name: set_transform
+      description: >
+        Record a new normalization recipe (versioned) for a dataset: an
+        explicit type, extra null tokens, a thousands separator, currency
+        symbols. Nothing is reloaded — call load_dataset with replace: true
+        afterwards to apply it. This is how a load becomes reproducible
+        instead of hand-fixed.
+      tool: ./tools/set-transform.mjs
+      parameters:
+        type: object
+        properties:
+          dataset_id:
+            type: integer
+            description: "The dataset whose recipe you are extending."
+          columns:
+            type: array
+            minItems: 1
+            description: "Per-column overrides to add."
+            items:
+              type: object
+              properties:
+                column_name:
+                  type: string
+                  description: "The normalized column name (see list_columns)."
+                explicit_type:
+                  type: string
+                  enum: [INTEGER, REAL, BOOLEAN, DATE, DATETIME, TEXT]
+                  description: "Force the column to this type."
+                null_tokens:
+                  type: array
+                  items: { type: string }
+                  description: "Extra strings meaning null, e.g. [\"n/a\", \"-\"]."
+                thousands_separator:
+                  type: string
+                  description: "Separator to strip before parsing numbers, e.g. \",\"."
+                currency_symbols:
+                  type: array
+                  items: { type: string }
+                  description: "Symbols to strip before parsing numbers, e.g. [\"$\"]."
+              required: [column_name]
+        required: [dataset_id, columns]
+
+    - name: export_report
+      description: >
+        Export the dataset's quality report as a keepable artifact: JSON, CSV
+        of the column metrics, or a Markdown report with provenance, schema,
+        metrics and findings. Deterministic, so two exports of the same data
+        are identical.
+      tool: ./tools/export-report.mjs
+      parameters:
+        type: object
+        properties:
+          dataset_id:
+            type: integer
+            description: "The dataset to report on."
+          format:
+            type: string
+            enum: [json, csv, markdown]
+            description: "Artifact format. Defaults to json."
+        required: [dataset_id]
+
+  # Entry agent — the analyst the user talks to.
+  workspace: ./config/workspace.yaml
+
+  # Sub-agents the entry agent delegates to. Auto-loaded by the CLI manifest
+  # loader; each file is a SubAgent declaration.
+  agents_from: ./config/agents/
+
+  # ── Workspace view ──────────────────────────────────────────────────
+  # The cleanroom console: the catalog, the typed schema, live load progress,
+  # the quality report, the quarantine, and a read-only query console.
+  views:
+    - type: panel
+      name: Data Cleanroom
+      source: ./workspace/index.html

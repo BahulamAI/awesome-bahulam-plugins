@@ -2,6 +2,15 @@
   "$schema": "https://docs.bahulam.ai/schemas/plugin-registry-1.json",
   "plugins": [
     {
+      "name": "data-cleanroom",
+      "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
+      "ref": "main",
+      "subdir": "plugins/data-cleanroom",
+      "description": "Turns messy CSV/TSV/JSON files into a typed, queryable SQLite warehouse plus a data-quality report — deterministic parsing, reproducible type inference, versioned recipes, sha256 provenance, a quarantine for every row that will not coerce, and idempotent reloads",
+      "author": "BahulamAI",
+      "tags": ["data", "etl", "csv", "sqlite", "quality", "state"]
+    },
+    {
       "name": "flashcards",
       "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
       "ref": "main",
