@@ -222,12 +222,16 @@ export async function call(args = {}, options = {}) {
         session_id: sessionId,
         url: snapshot.url || sessionRow.url,
         title: snapshot.title,
+        control_count: allControls.length,
+        button_count: allButtons.length,
         text_sample: snapshot.text_sample,
+        visible_text_sample: snapshot.text_sample,
         controls: allControls,
         buttons: allButtons,
         frames: frameList,
         console_errors: consoleErrors,
         screenshot: path.join(outDir, 'discovery.png'),
+        screenshot_path: path.join(outDir, 'discovery.png'),
       },
     };
   } finally {

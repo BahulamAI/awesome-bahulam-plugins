@@ -56,14 +56,16 @@ export function browserUserDataDir(root, sessionId) {
 
 export async function openBrowserPage(playwright, opts) {
   const {
-    userDataDir = '/tmp/browser-use',
+    root = process.cwd(),
+    sessionId = 'default',
+    userDataDir = browserUserDataDir(root, sessionId),
     headless = false,
     persistent = true,
   } = opts || {};
 
   let browser, context, page;
 
-  if (persistent) {
+  if (persistent && typeof playwright.chromium.launchPersistentContext === 'function') {
     context = await playwright.chromium.launchPersistentContext(userDataDir, {
       headless,
       args: ['--no-sandbox', '--disable-setuid-sandbox'],
@@ -72,8 +74,13 @@ export async function openBrowserPage(playwright, opts) {
     browser = context;
   } else {
     browser = await playwright.chromium.launch({ headless });
-    context = await browser.newContext();
-    page = await context.newPage();
+    if (typeof browser.newContext === 'function') {
+      context = await browser.newContext();
+      page = await context.newPage();
+    } else {
+      context = browser;
+      page = await browser.newPage();
+    }
   }
 
   return {
@@ -91,13 +98,21 @@ export async function openBrowserPage(playwright, opts) {
  * Cross-origin frames are included by metadata only (cannot evaluate).
  */
 export function detectFrames(page) {
+  if (!page || typeof page.frames !== 'function') return [];
   const frames = page.frames();
+  const pageUrl = typeof page.url === 'function' ? page.url() : '';
+  let origin = '';
+  try {
+    origin = pageUrl ? new URL(pageUrl).origin : '';
+  } catch {
+    origin = '';
+  }
   return frames.map((f, i) => ({
     index: i,
     url: f.url(),
     name: f.name() || '',
     isMain: i === 0,
-    isCrossOrigin: i > 0 && !f.url().startsWith(new URL(page.url()).origin),
+    isCrossOrigin: Boolean(origin) && i > 0 && !f.url().startsWith(origin),
   }));
 }
 
