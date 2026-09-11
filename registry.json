@@ -2,31 +2,31 @@
   "$schema": "https://docs.bahulam.ai/schemas/plugin-registry-1.json",
   "plugins": [
     {
-      "name": "data-cleanroom",
+      "name": "browser-use",
       "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
       "ref": "main",
-      "subdir": "plugins/data-cleanroom",
-      "description": "Turns messy CSV/TSV/JSON files into a typed, queryable SQLite warehouse plus a data-quality report — deterministic parsing, reproducible type inference, versioned recipes, sha256 provenance, a quarantine for every row that will not coerce, and idempotent reloads",
+      "subdir": "plugins/browser-use",
+      "description": "Browser form-filling runtime with session state, reusable form profiles, guarded fill plans, approval-gated submit actions, and local/hosted adapter contracts",
       "author": "BahulamAI",
-      "tags": ["data", "etl", "csv", "sqlite", "quality", "state"]
+      "tags": ["browser", "forms", "automation", "playwright", "mcp", "state", "approvals"]
     },
     {
-      "name": "excalidraw-spec",
+      "name": "campaign-studio",
       "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
       "ref": "main",
-      "subdir": "plugins/excalidraw-spec",
-      "description": "Scans a repository, draws its architecture from real parsed imports, and exports it as a genuine .excalidraw document, a Mermaid diagram or an onboarding spec — the agent names the layers, the scanner supplies the evidence",
+      "subdir": "plugins/campaign-studio",
+      "description": "Campaign outcome runtime — plan, create, approve, cross-post, and track content/ad campaigns with multi-agent workflow, durable state, simulated publishing, and analytics reporting",
       "author": "BahulamAI",
-      "tags": ["architecture", "excalidraw", "diagram", "documentation", "onboarding", "state"]
+      "tags": ["marketing", "campaigns", "ads", "content", "analytics", "state", "orchestration"]
     },
     {
-      "name": "flashcards",
+      "name": "content-creation",
       "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
       "ref": "main",
-      "subdir": "plugins/flashcards",
-      "description": "Flashcards from a document or a topic, with an SM-2 review schedule — due dates, ease factors and review history in declared SQLite tables, plus a live study console",
+      "subdir": "plugins/content-creation",
+      "description": "Multi-agent content runtime for copy, image, video, Three.js, and Manim assets with briefs, artifact tracking, background renders, review, and a live gallery",
       "author": "BahulamAI",
-      "tags": ["education", "flashcards", "spaced-repetition", "state"]
+      "tags": ["showcase", "content", "image", "video", "threejs", "manim", "async", "orchestration"]
     },
     {
       "name": "hello-mcp",
@@ -51,9 +51,9 @@
       "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
       "ref": "main",
       "subdir": "plugins/manim-studio",
-      "description": "Text-to-video animation studio — agent-written Manim scenes, background renders with wake-on-finish review, live gallery",
+      "description": "Standalone Manim animation studio for text-to-video explainers with render state, background jobs, review, and a live gallery",
       "author": "BahulamAI",
-      "tags": ["showcase", "video", "manim", "education"]
+      "tags": ["animation", "video", "manim", "async", "education", "explainer"]
     }
   ]
 }

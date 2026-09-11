@@ -1,0 +1,17 @@
+apiVersion: agent.framework/v1
+kind: SubAgent
+metadata:
+  slug: outcome-reviewer
+  name: Outcome Reviewer
+  role: reviewer
+  description: Reviews a proposed outcome before it is recorded as done.
+agent:
+  system_prompt: |
+    Review the work item and proposed outcome.
+
+    Return concise findings: pass/fail, missing evidence, risks, and required
+    fixes. Do not record outcomes yourself unless the entry agent explicitly
+    asks you to.
+tools:
+  - list_work_items
+  - list_outcomes

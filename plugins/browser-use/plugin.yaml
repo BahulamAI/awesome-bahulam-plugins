@@ -1,0 +1,256 @@
+apiVersion: bahulam.plugin/1
+kind: Plugin
+metadata:
+  name: browser-use
+  version: 0.1.0
+  description: >
+    Browser form-filling runtime. The browser operator helps users complete
+    web forms by creating reusable form profiles, planning field mappings,
+    recording browser actions, and requiring approval before submit-sensitive
+    actions. Local implementations can bind these contracts to Playwright;
+    hosted implementations can expose the same tools through MCP/Context Forge.
+  author: BahulamAI
+  repository: https://github.com/BahulamAI/awesome-bahulam-plugins
+
+config:
+  requirements:
+    env: []
+    network:
+      - browser targets selected by the user
+    optional_runtime:
+      - node package: playwright
+      - browser: chromium
+
+  state:
+    tables:
+      - name: browser_sessions
+        columns:
+          - { name: id, type: INTEGER, primary: true, autoincrement: true }
+          - { name: name, type: TEXT, not_null: true }
+          - { name: url, type: TEXT, not_null: true }
+          - { name: purpose, type: TEXT, not_null: true }
+          - { name: status, type: TEXT, not_null: true, default: "'planned'" }
+          - { name: created_at, type: TEXT, not_null: true }
+          - { name: updated_at, type: TEXT, not_null: true }
+        indexes:
+          - { columns: [status] }
+
+      - name: form_profiles
+        columns:
+          - { name: id, type: INTEGER, primary: true, autoincrement: true }
+          - { name: session_id, type: INTEGER, not_null: true, references: "browser_sessions(id)" }
+          - { name: label, type: TEXT, not_null: true }
+          - { name: fields_json, type: TEXT, not_null: true }
+          - { name: redactions_json, type: TEXT, not_null: true, default: "'[]'" }
+          - { name: created_at, type: TEXT, not_null: true }
+        indexes:
+          - { columns: [session_id] }
+
+      - name: browser_actions
+        columns:
+          - { name: id, type: INTEGER, primary: true, autoincrement: true }
+          - { name: session_id, type: INTEGER, not_null: true, references: "browser_sessions(id)" }
+          - { name: action, type: TEXT, not_null: true }
+          - { name: selector, type: TEXT, not_null: true, default: "''" }
+          - { name: value_summary, type: TEXT, not_null: true, default: "''" }
+          - { name: status, type: TEXT, not_null: true }
+          - { name: requires_approval, type: INTEGER, not_null: true, default: 0 }
+          - { name: created_at, type: TEXT, not_null: true }
+        indexes:
+          - { columns: [session_id] }
+
+    context_always:
+      - browser_runtime_state
+      - { stream: browser_activity, limit: 8 }
+
+    context_tools:
+      - name: list_browser_sessions
+        table: browser_sessions
+        description: List tracked browser form-fill sessions.
+        parameters:
+          type: object
+          properties:
+            limit: { type: integer, description: "Max rows to return." }
+
+      - name: list_browser_actions
+        table: browser_actions
+        description: List browser actions for a session.
+        parameters:
+          type: object
+          properties:
+            session_id: { type: integer }
+            limit: { type: integer }
+        where: "session_id = ?"
+        params: [session_id]
+
+  tools:
+    - name: browser_session_create
+      description: Create a tracked browser form-fill session for a user-selected URL.
+      tool: ./tools/browser-session-create.mjs
+      parameters:
+        type: object
+        properties:
+          name: { type: string, description: "Short session name." }
+          url: { type: string, description: "The page or form URL selected by the user." }
+          purpose: { type: string, description: "What the user wants completed." }
+          force_new: { type: boolean, description: "Create a new session even when an active session already exists for this URL. Default false." }
+        required: [name, url, purpose]
+
+    - name: form_profile_create
+      description: >
+        Store a reusable form profile: field labels, selectors when known,
+        intended values, and redaction policy. Sensitive values should be
+        summarized or marked as user-provided, not echoed.
+      tool: ./tools/form-profile-create.mjs
+      parameters:
+        type: object
+        properties:
+          session_id: { type: integer }
+          label: { type: string }
+          fields:
+            type: array
+            items:
+              type: object
+              properties:
+                name: { type: string }
+                selector: { type: string }
+                value: { type: string }
+                sensitive: { type: boolean }
+                source: { type: string, enum: [user, inferred, file, secret] }
+              required: [name]
+          redactions:
+            type: array
+            items: { type: string }
+        required: [session_id, label, fields]
+
+    - name: browser_form_discover
+      description: >
+        Open the session URL in a real browser with JavaScript enabled and
+        discover rendered form controls, labels, placeholders, names, ids,
+        selectors, buttons, page title, visible text sample, console errors,
+        and a screenshot. Use this before claiming a page is blank or has no
+        fillable fields.
+      tool: ./tools/browser-form-discover.mjs
+      parameters:
+        type: object
+        properties:
+          session_id: { type: integer }
+          headless: { type: boolean, description: "Run headless. Defaults to true for discovery." }
+          wait_ms: { type: integer, description: "Extra wait after page load for client-rendered forms. Default 1000." }
+          screenshot: { type: boolean, description: "Capture a screenshot. Default true." }
+          keep_open: { type: boolean, description: "Leave browser open after discovery." }
+          persistent_context: { type: boolean, description: "Reuse a per-session Playwright profile directory across browser tools. Default true." }
+        required: [session_id]
+
+    - name: form_fill_plan
+      description: Build a guarded step-by-step browser action plan from a form profile.
+      tool: ./tools/form-fill-plan.mjs
+      parameters:
+        type: object
+        properties:
+          session_id: { type: integer }
+          profile_id: { type: integer }
+          include_submit: { type: boolean, description: "Whether to include submit as an approval-gated final step." }
+        required: [session_id, profile_id]
+
+    - name: browser_action_record
+      description: >
+        Record a browser action, extracted observation, screenshot path, or
+        form-fill result. Submit/purchase/login-sensitive actions must set
+        requires_approval=true unless the user already approved them.
+      tool: ./tools/browser-action-record.mjs
+      parameters:
+        type: object
+        properties:
+          session_id: { type: integer }
+          action: { type: string, enum: [open, click, type, select, discover, extract, screenshot, submit, approval, error, done] }
+          selector: { type: string }
+          value_summary: { type: string }
+          status: { type: string, enum: [planned, completed, blocked, failed, approved] }
+          requires_approval: { type: boolean }
+        required: [session_id, action, status]
+
+    - name: browser_form_complete
+      description: >
+        Fast path for ordinary form filling. Creates or reuses a browser
+        session, discovers visible controls, creates a profile, fills fields,
+        screenshots the result, and records the submit gate in one browser
+        lifecycle. Prefer this over the lower-level discover/profile/plan/fill
+        pipeline when the user supplied the target URL and field values.
+      tool: ./tools/browser-form-complete.mjs
+      parameters:
+        type: object
+        properties:
+          name: { type: string, description: "Short session/profile name." }
+          url: { type: string, description: "The page or form URL selected by the user." }
+          purpose: { type: string, description: "What the user wants completed." }
+          label: { type: string, description: "Optional profile label." }
+          fields:
+            type: array
+            items:
+              type: object
+              properties:
+                name: { type: string }
+                selector: { type: string }
+                id: { type: string }
+                field_name: { type: string }
+                aria_label: { type: string }
+                placeholder: { type: string }
+                value: { type: string }
+                sensitive: { type: boolean }
+                source: { type: string, enum: [user, inferred, file, secret] }
+              required: [name]
+          submit: { type: boolean, description: "Whether to click the form submit control." }
+          submit_approved: { type: boolean, description: "Must be true before submit is clicked." }
+          submit_selector: { type: string, description: "Optional submit button selector." }
+          user_submit: { type: boolean, description: "Default true: fill and stop before submit for user review." }
+          keep_open: { type: boolean, description: "Leave browser open for user inspection. Defaults to true when submit=false." }
+          headless: { type: boolean, description: "Run headless. Defaults to false for manual user-submit handoff." }
+          wait_ms: { type: integer, description: "Extra wait after page load before discovery. Default 1000." }
+          discover: { type: boolean, description: "Discover controls before fill. Default true." }
+          persistent_context: { type: boolean, description: "Reuse a per-session Playwright profile directory. Default true." }
+          force_new: { type: boolean, description: "Create a new session even when an active matching session exists. Default false." }
+          redactions:
+            type: array
+            items: { type: string }
+        required: [url, fields]
+
+    - name: browser_form_fill
+      description: >
+        Execute the tracked form-fill profile in a real browser using Playwright.
+        Fills known selectors, records each action, captures a screenshot, can
+        read a localStorage key for verification, and refuses to click submit
+        unless submit_approved is true.
+      tool: ./tools/browser-form-fill.mjs
+      parameters:
+        type: object
+        properties:
+          session_id: { type: integer }
+          profile_id: { type: integer }
+          headless: { type: boolean, description: "Run headless. Defaults to false for manual user-submit handoff, true for approved submit automation." }
+          submit: { type: boolean, description: "Whether to click the form submit control." }
+          submit_approved: { type: boolean, description: "Must be true before submit is clicked." }
+          submit_selector: { type: string, description: "Optional submit button selector." }
+          local_storage_key: { type: string, description: "Optional localStorage key to read after submit." }
+          storage_wait_ms: { type: integer, description: "How long to retry localStorage verification in the same page after submit. Default 2000." }
+          keep_open: { type: boolean, description: "Leave the browser open for user inspection. Defaults to true when submit is false." }
+          user_submit: { type: boolean, description: "When true or omitted with submit=false, fill the form and hand off final submit to the user." }
+          persistent_context: { type: boolean, description: "Reuse a per-session Playwright profile directory across discovery and fill. Default true." }
+        required: [session_id, profile_id]
+
+    - name: browser_session_report
+      description: Build a concise report of the current browser session, profile, action log, and remaining approval gates.
+      tool: ./tools/browser-session-report.mjs
+      parameters:
+        type: object
+        properties:
+          session_id: { type: integer }
+        required: [session_id]
+
+  workspace: ./config/workspace.yaml
+  agents_from: ./config/agents/
+
+  views:
+    - type: panel
+      name: Browser Use
+      source: ./workspace/index.html

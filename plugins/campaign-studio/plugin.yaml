@@ -1,0 +1,230 @@
+apiVersion: bahulam.plugin/1
+kind: Plugin
+metadata:
+  name: campaign-studio
+  version: 0.1.0
+  description: >
+    Campaign Studio plans, creates, approves, cross-posts, and tracks ad/content
+    campaigns. It is a moat-level plugin example: multi-agent workflow, durable
+    campaign state, scheduled/published post records, metrics ingestion, and a
+    live workspace dashboard.
+  author: BahulamAI
+  repository: https://github.com/BahulamAI/awesome-bahulam-plugins
+
+config:
+  requirements:
+    env: []
+    network:
+      - host: api.twitter.com
+        reason: Publish and read metrics for X posts when a real connector is configured.
+        optional: true
+      - host: api.linkedin.com
+        reason: Publish and read metrics for LinkedIn posts when a real connector is configured.
+        optional: true
+      - host: graph.facebook.com
+        reason: Publish and read metrics for Meta/Instagram posts when a real connector is configured.
+        optional: true
+
+  state:
+    tables:
+      - name: campaigns
+        columns:
+          - { name: id, type: INTEGER, primary: true, autoincrement: true }
+          - { name: name, type: TEXT, not_null: true }
+          - { name: objective, type: TEXT, not_null: true }
+          - { name: audience, type: TEXT, not_null: true }
+          - { name: offer, type: TEXT, not_null: true }
+          - { name: channels, type: TEXT, not_null: true, default: "'[]'" }
+          - { name: status, type: TEXT, not_null: true, default: "'draft'" }
+          - { name: created_at, type: TEXT, not_null: true }
+          - { name: updated_at, type: TEXT, not_null: true }
+        indexes:
+          - { columns: [name], unique: true }
+
+      - name: variants
+        columns:
+          - { name: id, type: INTEGER, primary: true, autoincrement: true }
+          - { name: campaign_id, type: INTEGER, not_null: true, references: "campaigns(id)" }
+          - { name: channel, type: TEXT, not_null: true }
+          - { name: headline, type: TEXT, not_null: true }
+          - { name: body, type: TEXT, not_null: true }
+          - { name: call_to_action, type: TEXT, not_null: true }
+          - { name: asset_brief, type: TEXT, not_null: true, default: "''" }
+          - { name: status, type: TEXT, not_null: true, default: "'draft'" }
+          - { name: created_at, type: TEXT, not_null: true }
+          - { name: updated_at, type: TEXT, not_null: true }
+        indexes:
+          - { columns: [campaign_id] }
+          - { columns: [campaign_id, channel] }
+
+      - name: approvals
+        columns:
+          - { name: id, type: INTEGER, primary: true, autoincrement: true }
+          - { name: campaign_id, type: INTEGER, not_null: true, references: "campaigns(id)" }
+          - { name: variant_id, type: INTEGER, references: "variants(id)" }
+          - { name: reviewer, type: TEXT, not_null: true }
+          - { name: decision, type: TEXT, not_null: true }
+          - { name: notes, type: TEXT, not_null: true, default: "''" }
+          - { name: created_at, type: TEXT, not_null: true }
+        indexes:
+          - { columns: [campaign_id] }
+
+      - name: posts
+        columns:
+          - { name: id, type: INTEGER, primary: true, autoincrement: true }
+          - { name: campaign_id, type: INTEGER, not_null: true, references: "campaigns(id)" }
+          - { name: variant_id, type: INTEGER, references: "variants(id)" }
+          - { name: channel, type: TEXT, not_null: true }
+          - { name: status, type: TEXT, not_null: true }
+          - { name: scheduled_at, type: TEXT }
+          - { name: published_at, type: TEXT }
+          - { name: url, type: TEXT, not_null: true, default: "''" }
+          - { name: utm_url, type: TEXT, not_null: true, default: "''" }
+          - { name: created_at, type: TEXT, not_null: true }
+        indexes:
+          - { columns: [campaign_id] }
+          - { columns: [channel] }
+
+      - name: metrics
+        columns:
+          - { name: id, type: INTEGER, primary: true, autoincrement: true }
+          - { name: post_id, type: INTEGER, not_null: true, references: "posts(id)" }
+          - { name: impressions, type: INTEGER, not_null: true, default: "0" }
+          - { name: clicks, type: INTEGER, not_null: true, default: "0" }
+          - { name: conversions, type: INTEGER, not_null: true, default: "0" }
+          - { name: spend, type: REAL, not_null: true, default: "0" }
+          - { name: captured_at, type: TEXT, not_null: true }
+        indexes:
+          - { columns: [post_id] }
+
+    context_always:
+      - campaign_state
+      - { stream: campaign_activity, limit: 5 }
+
+    context_tools:
+      - name: list_campaigns
+        table: campaigns
+        description: List campaigns with status, objective, audience, and channels.
+        parameters:
+          type: object
+          properties:
+            limit: { type: integer, description: "Max rows to return." }
+
+      - name: list_variants
+        table: variants
+        description: List generated copy/creative variants for a campaign.
+        parameters:
+          type: object
+          properties:
+            campaign_id: { type: integer, description: "Campaign id." }
+            limit: { type: integer, description: "Max rows to return." }
+        where: "campaign_id = ?"
+        params: [campaign_id]
+
+      - name: list_posts
+        table: posts
+        description: List scheduled or published posts for a campaign.
+        parameters:
+          type: object
+          properties:
+            campaign_id: { type: integer, description: "Campaign id." }
+            limit: { type: integer, description: "Max rows to return." }
+        where: "campaign_id = ?"
+        params: [campaign_id]
+
+      - name: list_metrics
+        table: metrics
+        description: List captured metrics for published posts.
+        parameters:
+          type: object
+          properties:
+            post_id: { type: integer, description: "Post id." }
+            limit: { type: integer, description: "Max rows to return." }
+        where: "post_id = ?"
+        params: [post_id]
+
+  tools:
+    - name: campaign_create
+      description: Create or update a campaign brief and store it in durable plugin state.
+      tool: ./tools/campaign-create.mjs
+      parameters:
+        type: object
+        properties:
+          name: { type: string }
+          objective: { type: string }
+          audience: { type: string }
+          offer: { type: string }
+          channels:
+            type: array
+            items: { type: string, enum: [x, linkedin, instagram, email, blog] }
+        required: [name, objective, audience, offer]
+
+    - name: copy_variant_create
+      description: Generate channel-specific copy variants and asset briefs from a campaign.
+      tool: ./tools/copy-variant-create.mjs
+      parameters:
+        type: object
+        properties:
+          campaign_id: { type: integer }
+          channels:
+            type: array
+            items: { type: string, enum: [x, linkedin, instagram, email, blog] }
+          tone: { type: string, description: "Brand tone, e.g. pragmatic, playful, executive." }
+        required: [campaign_id]
+
+    - name: approval_record
+      description: Record review approval/rejection for a campaign or a specific variant.
+      tool: ./tools/approval-record.mjs
+      parameters:
+        type: object
+        properties:
+          campaign_id: { type: integer }
+          variant_id: { type: integer }
+          reviewer: { type: string }
+          decision: { type: string, enum: [approved, rejected, changes_requested] }
+          notes: { type: string }
+        required: [campaign_id, reviewer, decision]
+
+    - name: post_schedule
+      description: Create scheduled post records with UTM links. Default mode is simulated and safe.
+      tool: ./tools/post-schedule.mjs
+      parameters:
+        type: object
+        properties:
+          campaign_id: { type: integer }
+          variant_ids:
+            type: array
+            items: { type: integer }
+          scheduled_at: { type: string, description: "ISO timestamp or human-readable schedule label." }
+          landing_url: { type: string }
+        required: [campaign_id]
+
+    - name: metrics_record
+      description: Record channel metrics for published/scheduled posts.
+      tool: ./tools/metrics-record.mjs
+      parameters:
+        type: object
+        properties:
+          post_id: { type: integer }
+          impressions: { type: integer }
+          clicks: { type: integer }
+          conversions: { type: integer }
+          spend: { type: number }
+        required: [post_id]
+
+    - name: campaign_report
+      description: Build an iteration report from campaign variants, posts, approvals, and metrics.
+      tool: ./tools/campaign-report.mjs
+      parameters:
+        type: object
+        properties:
+          campaign_id: { type: integer }
+        required: [campaign_id]
+
+  workspace: ./config/workspace.yaml
+  agents_from: ./config/agents/
+
+  views:
+    - type: panel
+      name: Campaign Studio
+      source: ./workspace/index.html

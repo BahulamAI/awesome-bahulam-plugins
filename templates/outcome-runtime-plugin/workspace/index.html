@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Outcome Runtime</title>
+<style>
+:root{--bg:#f6f7f5;--panel:#fff;--line:#d9ded7;--fg:#17202a;--muted:#667085;--brand:#0f766e;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.45 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+header{padding:18px 22px;background:#fff;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:16px}
+h1{font-size:18px;margin:0 0 4px}
+p{margin:0;color:var(--muted)}
+main{display:grid;grid-template-columns:320px 1fr;gap:14px;padding:14px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--brand);margin:0;padding:10px 12px;border-bottom:1px solid var(--line)}
+.content{padding:12px}
+label{display:block;margin:0 0 9px;color:var(--muted);font-size:11px}
+label span{display:block;margin-bottom:3px}
+input,textarea{width:100%;border:1px solid var(--line);border-radius:6px;padding:7px 8px;font:12px var(--mono)}
+textarea{min-height:76px;resize:vertical}
+button{border:1px solid var(--line);border-radius:6px;background:#fff;padding:7px 10px;font-weight:600;cursor:pointer}
+button.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+.list{display:flex;flex-direction:column;gap:8px}
+.item{border:1px solid var(--line);border-radius:7px;padding:9px;background:#fff}
+.item strong{display:block}
+.item small{color:var(--muted)}
+.status{font-size:12px;color:var(--muted);margin-top:8px}
+@media(max-width:760px){main{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Outcome Runtime</h1>
+    <p>Template panel backed by plugin state and live events.</p>
+  </div>
+  <button id="refresh">Refresh</button>
+</header>
+<main>
+  <section class="panel">
+    <h2>Create</h2>
+    <div class="content">
+      <label><span>Title</span><input id="title" value="Example outcome"></label>
+      <label><span>Objective</span><textarea id="objective">Replace this with the domain outcome this plugin delivers.</textarea></label>
+      <button class="primary" id="create">Create work item</button>
+      <button id="record">Record outcome</button>
+      <div class="status" id="status"></div>
+    </div>
+  </section>
+  <section class="panel">
+    <h2>State</h2>
+    <div class="content">
+      <div class="list" id="items"></div>
+    </div>
+  </section>
+</main>
+<script>
+const token = new URLSearchParams(location.search).get('token') || '';
+const PLUGIN = 'outcome-runtime-template';
+let activeId = null;
+async function tool(name,args){
+  const res=await fetch('/api/tools/execute',{method:'POST',headers:{'Content-Type':'application/json','X-Bahulam-Local-Token':token},body:JSON.stringify({name,args})});
+  const body=await res.json();
+  if(!res.ok||body.ok===false)throw new Error(body.error||body.message||'request failed');
+  const r=body.result;
+  if(r&&r.success===false)throw new Error(String(r.output));
+  return r&&r.output!==undefined?r.output:r;
+}
+function setStatus(msg){document.getElementById('status').textContent=msg}
+function item(html){const d=document.createElement('div');d.className='item';d.innerHTML=html;return d}
+async function load(){
+  const out=await tool('list_work_items',{limit:20});
+  const rows=out.rows||[];
+  activeId=activeId||rows[0]?.id||null;
+  const el=document.getElementById('items');
+  el.innerHTML='';
+  rows.forEach(row=>el.appendChild(item(`<strong>#${row.id} ${row.title}</strong><small>${row.status} - ${row.objective}</small>`)));
+}
+document.getElementById('refresh').onclick=()=>load().catch(e=>setStatus(e.message));
+document.getElementById('create').onclick=async()=>{try{const out=await tool('create_work_item',{title:title.value,objective:objective.value});activeId=out.work_item_id;setStatus('created');await load()}catch(e){setStatus(e.message)}};
+document.getElementById('record').onclick=async()=>{try{await tool('record_outcome',{work_item_id:activeId,kind:'example',summary:'Template outcome recorded.'});setStatus('outcome recorded');await load()}catch(e){setStatus(e.message)}};
+try{const es=new EventSource('/api/events?token='+encodeURIComponent(token));es.onmessage=e=>{try{const msg=JSON.parse(e.data);if(msg.type==='plugin_state_changed'&&(!msg.plugin||msg.plugin===PLUGIN))load()}catch{}}}catch{}
+load().catch(e=>setStatus(e.message));
+</script>
+</body>
+</html>

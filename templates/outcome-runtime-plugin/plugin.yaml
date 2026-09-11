@@ -1,0 +1,105 @@
+apiVersion: bahulam.plugin/1
+kind: Plugin
+metadata:
+  name: outcome-runtime-template
+  version: 0.1.0
+  description: >
+    Minimal Bahulam outcome-runtime skeleton. Copy this directory to
+    plugins/<your-plugin>, rename the slugs, then replace the generic work item
+    tools with domain tools or MCP adapters.
+  author: YourName
+
+config:
+  requirements:
+    env: []
+    network: []
+
+  state:
+    tables:
+      - name: work_items
+        columns:
+          - { name: id, type: INTEGER, primary: true, autoincrement: true }
+          - { name: title, type: TEXT, not_null: true }
+          - { name: objective, type: TEXT, not_null: true }
+          - { name: status, type: TEXT, not_null: true, default: "'open'" }
+          - { name: owner, type: TEXT, not_null: true, default: "''" }
+          - { name: created_at, type: TEXT, not_null: true }
+          - { name: updated_at, type: TEXT, not_null: true }
+        indexes:
+          - { columns: [status] }
+
+      - name: outcomes
+        columns:
+          - { name: id, type: INTEGER, primary: true, autoincrement: true }
+          - { name: work_item_id, type: INTEGER, not_null: true, references: "work_items(id)" }
+          - { name: kind, type: TEXT, not_null: true }
+          - { name: summary, type: TEXT, not_null: true }
+          - { name: artifact_path, type: TEXT, not_null: true, default: "''" }
+          - { name: created_at, type: TEXT, not_null: true }
+        indexes:
+          - { columns: [work_item_id] }
+
+    context_always:
+      - runtime_state
+      - { stream: activity, limit: 5 }
+
+    context_tools:
+      - name: list_work_items
+        table: work_items
+        description: List work items tracked by this plugin.
+        parameters:
+          type: object
+          properties:
+            limit: { type: integer, description: "Max rows to return." }
+
+      - name: list_outcomes
+        table: outcomes
+        description: List outcomes recorded for a work item.
+        parameters:
+          type: object
+          properties:
+            work_item_id: { type: integer, description: "Work item id." }
+            limit: { type: integer, description: "Max rows to return." }
+        where: "work_item_id = ?"
+        params: [work_item_id]
+
+  tools:
+    - name: create_work_item
+      description: Create a tracked work item in plugin state.
+      tool: ./tools/create-work-item.mjs
+      parameters:
+        type: object
+        properties:
+          title: { type: string }
+          objective: { type: string }
+          owner: { type: string }
+        required: [title, objective]
+
+    - name: record_outcome
+      description: Record a durable outcome for a work item.
+      tool: ./tools/record-outcome.mjs
+      parameters:
+        type: object
+        properties:
+          work_item_id: { type: integer }
+          kind: { type: string }
+          summary: { type: string }
+          artifact_path: { type: string }
+        required: [work_item_id, kind, summary]
+
+    - name: build_outcome_report
+      description: Build a report from work items and recorded outcomes.
+      tool: ./tools/build-outcome-report.mjs
+      parameters:
+        type: object
+        properties:
+          work_item_id: { type: integer }
+        required: [work_item_id]
+
+  workspace: ./config/workspace.yaml
+  agents_from: ./config/agents/
+
+  views:
+    - type: panel
+      name: Outcome Runtime
+      source: ./workspace/index.html
