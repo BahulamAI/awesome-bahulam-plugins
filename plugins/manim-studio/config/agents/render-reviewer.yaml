@@ -17,6 +17,7 @@ agent:
     1. Find the output video path in the log (media/videos/.../<Class>.mp4).
     2. register_render with status "completed", the video path, the
        render duration, and a one-line note.
+    3. If asked for handoff evidence, call render_report for the slug.
 
     If the render FAILED:
     1. Read the error from the log tail (Manim errors are usually a
@@ -30,6 +31,7 @@ tools:
   - job_output
   - register_render
   - list_renders
+  - render_report
   - read_file
   - render_scene
   - shell

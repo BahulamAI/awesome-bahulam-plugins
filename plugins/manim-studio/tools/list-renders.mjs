@@ -2,11 +2,29 @@
  * list_renders — saved scenes + render outcomes from the blackboard,
  * newest first. Read side of the studio's history.
  */
+import { rows, stateOf } from './lib.mjs';
+
 export async function call(args = {}, options = {}) {
   const limit = Math.min(Math.max(Number(args.limit) || 20, 1), 200);
-  const state = options.state ? await options.state : null;
+  const state = await stateOf(options);
   if (!state) {
     return { success: false, output: 'Shared blackboard unavailable in this context.' };
+  }
+  const sqlScenes = rows(state, `SELECT * FROM render_scenes ORDER BY id DESC LIMIT ?`, [limit]);
+  const sqlJobs = rows(state, `SELECT * FROM render_jobs ORDER BY id DESC LIMIT ?`, [limit]);
+  if (sqlScenes.length || sqlJobs.length) {
+    const lines = sqlJobs.map(r => {
+      return `${r.status === 'completed' ? '✓' : r.status === 'failed' ? '✗' : '↻'} ${r.slug}`
+        + (r.duration_s ? ` · ${r.duration_s}s` : '')
+        + (r.video_path ? ` · ${r.video_path}` : '')
+        + (r.notes ? ` — ${r.notes}` : '');
+    });
+    return {
+      success: true,
+      output: lines.join('\n') || '(scenes saved, no renders recorded yet)',
+      renders: sqlJobs,
+      scenes: sqlScenes,
+    };
   }
   const renders = state.list('renders', { limit, order: 'desc' }) || [];
   const scenes = state.list('scenes', { limit, order: 'desc' }) || [];

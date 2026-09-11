@@ -69,7 +69,7 @@ class BrandedTitleScene(Scene):
 
 Before writing `scene.py`, the animator MUST:
 
-1. Enumerate `assets/` (via `ls` on OSS, `list_workspace_files` on SaaS).
+1. Enumerate `assets/` with the platform `list_files` tool.
 2. Read every file it might reuse (`read_file` / `read_workspace_file`).
 3. Import concrete symbols where applicable:
    ```python

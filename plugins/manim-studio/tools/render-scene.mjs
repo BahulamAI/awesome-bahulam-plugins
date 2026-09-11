@@ -21,7 +21,7 @@
  *       script.md                     the approved brief (optional)
  *       manifest.json                 {slug, class, quality, cmd, video, ts}
  *       videos/                       manim's --media_dir output lands here
- *         <slug>/<resolution>/<Class>.mp4
+ *         scene/<resolution>/<Class>.mp4
  *
  * All values are relative to the caller's `cwd`, so a project's git
  * checkout owns its own manim-studio/ folder. Assets are optional; the
@@ -29,6 +29,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { appendEvent, appendStream, run, stateOf } from './lib.mjs';
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const CLASS_RE = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
@@ -68,10 +69,11 @@ export async function call(args = {}, options = {}) {
 
   // Point manim's --media_dir at renders/<slug> so its own `videos/` shim
   // lands inside the render folder — final path is
-  // renders/<slug>/videos/<slug>/<resolution>/<Class>.mp4.
+  // renders/<slug>/videos/scene/<resolution>/<Class>.mp4 because the
+  // generated source file is scene.py.
   const renderCommand = `manim render -q${quality} --media_dir "${renderDir}" "${scenePath}" ${sceneClass}`;
   const resolution = quality === 'l' ? '480p15' : quality === 'h' ? '1080p60' : '720p30';
-  const expectedVideo = path.join(renderDir, 'videos', name, resolution, `${sceneClass}.mp4`);
+  const expectedVideo = path.join(renderDir, 'videos', 'scene', resolution, `${sceneClass}.mp4`);
 
   const manifest = {
     slug: name,
@@ -89,15 +91,32 @@ export async function call(args = {}, options = {}) {
   const manifestPath = path.join(renderDir, 'manifest.json');
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf-8');
 
-  const state = options.state ? await options.state : null;
+  const state = await stateOf(options);
   if (state) {
-    state.append('scenes', {
+    appendStream(state, 'scenes', {
       name,
       scene_class: sceneClass,
       scene_path: scenePath,
       manifest_path: manifestPath,
       quality,
     });
+    run(state, `INSERT INTO render_scenes
+      (slug, title, scene_class, quality, resolution, scene_path, script_path, manifest_path, expected_video, status, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+      name,
+      title,
+      sceneClass,
+      quality,
+      resolution,
+      scenePath,
+      scriptPath,
+      manifestPath,
+      expectedVideo,
+      'saved',
+      manifest.created_at,
+      manifest.created_at,
+    ]);
+    appendEvent(state, 'scene_saved', { slug: name, scene_class: sceneClass, quality, manifest_path: manifestPath });
   }
 
   return {
