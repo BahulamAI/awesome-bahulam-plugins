@@ -3,9 +3,14 @@
 ## Adding your plugin to the registry
 
 1. Fork this repo.
-2. Add one entry to `registry.json` (keep the array alphabetically sorted).
-3. Verify the JSON parses: `node -e 'JSON.parse(require("fs").readFileSync("registry.json"))'`
-4. Open a PR with:
+2. Prefer a Bahulam-native plugin for publishable work. Start from
+   `templates/outcome-runtime-plugin` when you need an entry agent, state,
+   workspace UI, and a future SaaS/MCP path.
+3. Use pi packages as ingredients through `config.composes` when they provide
+   useful tools, but publish the Bahulam plugin as the user-facing app/runtime.
+4. Add one entry to `registry.json` (keep the array alphabetically sorted).
+5. Verify the JSON parses: `node -e 'JSON.parse(require("fs").readFileSync("registry.json"))'`
+6. Open a PR with:
    - Link to your plugin repo
    - Screenshot(s) of any workspace view
    - Output of `bahulam install <your-git-url> && bahulam info <your-name>`
@@ -22,6 +27,19 @@ subdirectory contributions under `plugins/`. Include:
 
 Use the `subdir` field in your `registry.json` entry so the CLI knows to
 install only your subdirectory.
+
+## Bahulam plugins vs pi packages
+
+Bahulam supports both:
+
+- pi packages are composable tool ingredients.
+- Bahulam plugins are the first-class outcome runtime: entry agent, tools/MCP,
+  state, workspace UX, artifacts, and publish/review metadata.
+
+If your contribution is mainly a reusable tool package, compose it from pi.
+If it should deliver a user-visible workflow, wrap it as a Bahulam plugin. The
+hosted/SaaS direction is to expose plugin tools through MCP/Context Forge rather
+than maintaining separate backend copies.
 
 ## Manifest hygiene
 

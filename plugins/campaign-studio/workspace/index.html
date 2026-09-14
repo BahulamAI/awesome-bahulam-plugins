@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Campaign Studio</title>
+<style>
+:root{--bg:#f7f7f4;--fg:#1d2430;--muted:#667085;--line:#d9ded7;--panel:#fff;--brand:#0f766e;--accent:#7c2d12;--ok:#166534;--warn:#a16207;--bad:#b91c1c;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.45 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+header{padding:18px 22px;border-bottom:1px solid var(--line);display:flex;align-items:flex-start;justify-content:space-between;gap:18px;background:#fff}
+h1{font-size:19px;margin:0 0 4px}
+p{margin:0;color:var(--muted)}
+.wrap{display:grid;grid-template-columns:300px 1fr;min-height:calc(100vh - 76px)}
+aside{border-right:1px solid var(--line);padding:14px;background:#fbfbf8}
+main{padding:14px;display:grid;grid-template-rows:auto 1fr;gap:14px}
+.band{display:grid;grid-template-columns:repeat(4,minmax(130px,1fr));gap:10px}
+.metric,.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px}
+.metric{padding:12px}
+.metric b{display:block;font-size:22px}
+.metric span{color:var(--muted);font-size:11px;text-transform:uppercase}
+.panel{overflow:hidden}
+.panel h2{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--brand);margin:0;padding:10px 12px;border-bottom:1px solid var(--line)}
+.content{padding:12px}
+button{border:1px solid var(--line);background:#fff;border-radius:6px;padding:7px 10px;cursor:pointer;color:var(--fg);font-weight:600}
+button.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+input,textarea,select{width:100%;border:1px solid var(--line);border-radius:6px;padding:7px 8px;background:#fff;font:12px var(--mono);color:var(--fg)}
+label{display:block;font-size:11px;color:var(--muted);margin:0 0 8px}
+label span{display:block;margin-bottom:3px}
+textarea{min-height:68px;resize:vertical}
+.list{display:flex;flex-direction:column;gap:8px}
+.item{border:1px solid var(--line);border-radius:7px;padding:9px;background:#fff}
+.item strong{display:block;font-size:13px}
+.item small{color:var(--muted)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+table{width:100%;border-collapse:collapse}
+th,td{padding:8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font-size:11px;color:var(--muted);text-transform:uppercase}
+.status{font-size:12px;color:var(--muted);padding:8px 0}
+.pill{display:inline-block;border-radius:999px;padding:2px 7px;background:#eef2f1;color:var(--brand);font-size:11px}
+@media(max-width:860px){.wrap{grid-template-columns:1fr}.band{grid-template-columns:1fr 1fr}aside{border-right:0;border-bottom:1px solid var(--line)}.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Campaign Studio</h1>
+    <p>Plan, approve, schedule, and track cross-channel campaigns from plugin state.</p>
+  </div>
+  <button class="primary" id="refresh">Refresh</button>
+</header>
+<div class="wrap">
+  <aside>
+    <div class="panel">
+      <h2>New Campaign</h2>
+      <div class="content">
+        <label><span>Name</span><input id="name" value="Bahulam vNext Launch"></label>
+        <label><span>Objective</span><textarea id="objective">Introduce Bahulam plugins as outcome runtimes, not prompt packs.</textarea></label>
+        <label><span>Audience</span><input id="audience" value="engineering leaders and AI builders"></label>
+        <label><span>Offer</span><input id="offer" value="install a multi-agent campaign workflow"></label>
+        <label><span>Channels</span><input id="channels" value="x,linkedin,email"></label>
+        <button class="primary" id="create">Create Campaign</button>
+        <button id="variants">Create Variants</button>
+        <button id="schedule">Schedule Posts</button>
+        <button id="report">Build Report</button>
+        <div class="status" id="status"></div>
+      </div>
+    </div>
+  </aside>
+  <main>
+    <div class="band">
+      <div class="metric"><span>Campaigns</span><b id="mCampaigns">0</b></div>
+      <div class="metric"><span>Variants</span><b id="mVariants">0</b></div>
+      <div class="metric"><span>Posts</span><b id="mPosts">0</b></div>
+      <div class="metric"><span>Metrics</span><b id="mMetrics">0</b></div>
+    </div>
+    <div class="grid">
+      <section class="panel"><h2>Campaigns</h2><div class="content"><div class="list" id="campaigns"></div></div></section>
+      <section class="panel"><h2>Variants</h2><div class="content"><div class="list" id="variantsList"></div></div></section>
+      <section class="panel"><h2>Posts</h2><div class="content"><table><thead><tr><th>Channel</th><th>Status</th><th>URL</th></tr></thead><tbody id="posts"></tbody></table></div></section>
+      <section class="panel"><h2>Activity</h2><div class="content"><div class="list" id="activity"></div></div></section>
+    </div>
+  </main>
+</div>
+<script>
+const token = new URLSearchParams(location.search).get('token') || '';
+const PLUGIN = 'campaign-studio';
+let activeCampaignId = null;
+async function tool(name,args){
+  const res=await fetch('/api/tools/execute',{method:'POST',headers:{'Content-Type':'application/json','X-Bahulam-Local-Token':token},body:JSON.stringify({name,args})});
+  const body=await res.json();
+  if(!res.ok||body.ok===false)throw new Error(body.error||body.message||'request failed');
+  const r=body.result;
+  if(r&&r.success===false)throw new Error(String(r.output));
+  return r&&r.output!==undefined?r.output:r;
+}
+async function state(op,extra={}){
+  const res=await fetch('/api/plugin-state/'+PLUGIN,{method:'POST',headers:{'Content-Type':'application/json','X-Bahulam-Local-Token':token},body:JSON.stringify({op,...extra})});
+  const body=await res.json();
+  if(!res.ok||body.ok===false)throw new Error(body.error||'state request failed');
+  return body.result||body;
+}
+function setStatus(msg,err=false){const el=document.getElementById('status');el.textContent=msg;el.style.color=err?'var(--bad)':'var(--muted)'}
+function item(html){const d=document.createElement('div');d.className='item';d.innerHTML=html;return d}
+async function load(){
+  try{
+    const campaigns=(await tool('list_campaigns',{limit:20})).rows||[];
+    activeCampaignId=activeCampaignId||campaigns[0]?.id||null;
+    const variants=activeCampaignId?(await tool('list_variants',{campaign_id:activeCampaignId,limit:100})).rows||[]:[];
+    const posts=activeCampaignId?(await tool('list_posts',{campaign_id:activeCampaignId,limit:100})).rows||[]:[];
+    document.getElementById('mCampaigns').textContent=campaigns.length;
+    document.getElementById('mVariants').textContent=variants.length;
+    document.getElementById('mPosts').textContent=posts.length;
+    document.getElementById('mMetrics').textContent='-';
+    const c=document.getElementById('campaigns');c.innerHTML='';
+    campaigns.forEach(x=>c.appendChild(item(`<strong>${x.name}</strong><small>${x.objective}</small><br><span class="pill">${x.status}</span>`)));
+    const v=document.getElementById('variantsList');v.innerHTML='';
+    variants.forEach(x=>v.appendChild(item(`<strong>${x.channel}: ${x.headline}</strong><small>${String(x.body).slice(0,160)}</small><br><span class="pill">${x.status}</span>`)));
+    const p=document.getElementById('posts');p.innerHTML='';
+    posts.forEach(x=>{const tr=document.createElement('tr');tr.innerHTML=`<td>${x.channel}</td><td>${x.status}</td><td><code>${x.url||''}</code></td>`;p.appendChild(tr)});
+    const activity=(await state('list',{stream:'campaign_activity',limit:20,order:'desc'})).rows||[];
+    const a=document.getElementById('activity');a.innerHTML='';
+    activity.forEach(x=>a.appendChild(item(`<strong>${x.payload?.type||'event'}</strong><small>${new Date(x.created_at).toLocaleString()}</small>`)));
+  }catch(e){setStatus(e.message,true)}
+}
+document.getElementById('refresh').onclick=load;
+document.getElementById('create').onclick=async()=>{try{const out=await tool('campaign_create',{name:name.value,objective:objective.value,audience:audience.value,offer:offer.value,channels:channels.value.split(',')});activeCampaignId=out.campaign_id;setStatus('campaign created');await load()}catch(e){setStatus(e.message,true)}};
+document.getElementById('variants').onclick=async()=>{try{await tool('copy_variant_create',{campaign_id:activeCampaignId,channels:channels.value.split(','),tone:'pragmatic'});setStatus('variants created');await load()}catch(e){setStatus(e.message,true)}};
+document.getElementById('schedule').onclick=async()=>{try{await tool('post_schedule',{campaign_id:activeCampaignId,landing_url:'https://bahulam.ai/plugins'});setStatus('posts scheduled');await load()}catch(e){setStatus(e.message,true)}};
+document.getElementById('report').onclick=async()=>{try{const r=await tool('campaign_report',{campaign_id:activeCampaignId});setStatus(r.recommendation);await load()}catch(e){setStatus(e.message,true)}};
+try{const es=new EventSource('/api/events?token='+encodeURIComponent(token));es.onmessage=e=>{try{const msg=JSON.parse(e.data);if(msg.type==='plugin_state_changed'&&(!msg.plugin||msg.plugin===PLUGIN))load()}catch{}}}catch{}
+load();
+</script>
+</body>
+</html>

@@ -14,8 +14,18 @@ pip install manim          # Manim Community Edition
 ffmpeg -version            # bundled with manim on most installs
 ```
 
-Verify with `node plugins/manim-studio/selftest.mjs` (prereqs are probed,
-tool logic is tested offline).
+Verify the tool contract offline:
+
+```bash
+node plugins/manim-studio/selftest.mjs
+```
+
+For release/preflight validation, require the runtime dependencies and run
+a real low-quality render:
+
+```bash
+MANIM_STUDIO_PREFLIGHT=1 node plugins/manim-studio/selftest.mjs
+```
 
 ## Install & try
 
@@ -58,7 +68,7 @@ the moment it finishes). Everything lands under
     ├── script.md                        approved storyboard (when provided)
     ├── manifest.json                    {slug, class, quality, render_command,
     │                                     expected_video, created_at, status}
-    └── videos/<slug>/<res>/<Class>.mp4  manim's rendered output
+    └── videos/scene/<res>/<Class>.mp4   manim's rendered output
 ```
 
 The `assets/` folder is optional. The animator agent checks it before every
@@ -75,9 +85,11 @@ constants + boilerplate every time.
 |---|---|
 | Background jobs + wake-on-finish | `shell run_in_background` + `on_complete_agent: render-reviewer` |
 | Parallel sub-agents | multiple scenes → `animator#1` / `animator#2` lanes |
-| Shared blackboard | `renders` / `scenes` streams; gallery lists from them |
+| Durable plugin state | `render_scenes`, `render_approvals`, `render_jobs`; stream compatibility for the gallery |
+| Approval gate | `render_approval_record` persists approved/rejected/change-requested scripts before render |
 | Reactive canvas (cross-process) | gallery re-renders on `plugin_state_changed`, including the coarse `kind:'*'` pulse when the agent ran in the terminal |
 | Self-healing pipeline | reviewer reads the failed job's log tail, patches the scene, re-renders |
+| Evidence handoff | `render_report` returns source, approvals, jobs, video paths, readiness, and failures |
 
 ## Plugin source layout
 
@@ -86,8 +98,11 @@ plugins/manim-studio/
 ├── plugin.yaml                # tool, entry-agent path, subagent path, view declarations
 ├── tools/
 │   ├── render-scene.mjs       # writes render folder + returns render command
-│   ├── register-render.mjs    # blackboard write the gallery listens to
-│   └── list-renders.mjs       # history for agent + humans
+│   ├── register-render.mjs    # records render outcomes
+│   ├── list-renders.mjs       # history for agent + humans
+│   ├── render-approval-record.mjs
+│   ├── render-report.mjs
+│   └── lib.mjs
 ├── workspace/
 │   └── studio.html            # live render gallery panel
 ├── config/                    # subagents + reference docs
@@ -117,8 +132,8 @@ plugins/manim-studio/
    these into the runtime agent list; backend and marketplace consumers
    can read the same files from the plugin package.
 4. **`tools/*.mjs`** — the CLI's tool executor loads these dynamically
-   when the agent calls `render_scene`, `register_render`, or
-   `list_renders`.
+   when the agent calls `render_scene`, `register_render`,
+   `list_renders`, `render_approval_record`, or `render_report`.
 
 ## Tool Ownership
 
@@ -129,9 +144,11 @@ Subagent `tools:` entries are a mixed allowlist:
 | `render_scene` | plugin-local: `tools/render-scene.mjs` |
 | `register_render` | plugin-local: `tools/register-render.mjs` |
 | `list_renders` | plugin-local: `tools/list-renders.mjs` |
+| `render_approval_record` | plugin-local: `tools/render-approval-record.mjs` |
+| `render_report` | plugin-local: `tools/render-report.mjs` |
 | `delegate` | platform meta-tool |
 | `read_file` | platform filesystem tool |
-| `ls` | platform filesystem tool |
+| `list_files` | platform filesystem tool |
 | `shell` | platform shell tool |
 | `job_output` | platform background-job tool |
 

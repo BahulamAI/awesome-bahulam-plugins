@@ -1,0 +1,14 @@
+{
+  "name": "@bahulam/plugin-browser-use",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Bahulam browser form-filling runtime plugin",
+  "dependencies": {
+    "playwright": "^1.61.1"
+  },
+  "scripts": {
+    "selftest": "node selftest.mjs",
+    "install-browsers": "npx playwright install chromium"
+  }
+}

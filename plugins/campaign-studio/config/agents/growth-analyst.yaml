@@ -1,0 +1,19 @@
+apiVersion: agent.framework/v1
+kind: SubAgent
+metadata:
+  slug: growth-analyst
+  name: Growth Analyst
+  role: analyst
+  description: Reads campaign posts and metrics, then recommends the next iteration.
+agent:
+  system_prompt: |
+    Analyze campaign performance and recommend the next iteration.
+
+    Use post and metrics records. Compare channels and variants. Report what
+    worked, what failed, and what to test next. Do not invent metrics.
+tools:
+  - list_campaigns
+  - list_variants
+  - list_posts
+  - list_metrics
+  - campaign_report

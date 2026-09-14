@@ -2,6 +2,33 @@
   "$schema": "https://docs.bahulam.ai/schemas/plugin-registry-1.json",
   "plugins": [
     {
+      "name": "browser-use",
+      "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
+      "ref": "main",
+      "subdir": "plugins/browser-use",
+      "description": "Browser form-filling runtime with session state, reusable form profiles, guarded fill plans, approval-gated submit actions, and local/hosted adapter contracts",
+      "author": "BahulamAI",
+      "tags": ["browser", "forms", "automation", "playwright", "mcp", "state", "approvals"]
+    },
+    {
+      "name": "campaign-studio",
+      "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
+      "ref": "main",
+      "subdir": "plugins/campaign-studio",
+      "description": "Campaign outcome runtime — plan, create, approve, cross-post, and track content/ad campaigns with multi-agent workflow, durable state, simulated publishing, and analytics reporting",
+      "author": "BahulamAI",
+      "tags": ["marketing", "campaigns", "ads", "content", "analytics", "state", "orchestration"]
+    },
+    {
+      "name": "content-creation",
+      "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
+      "ref": "main",
+      "subdir": "plugins/content-creation",
+      "description": "Multi-agent content runtime for copy, image, video, Three.js, and Manim assets with briefs, artifact tracking, background renders, review, and a live gallery",
+      "author": "BahulamAI",
+      "tags": ["showcase", "content", "image", "video", "threejs", "manim", "async", "orchestration"]
+    },
+    {
       "name": "hello-mcp",
       "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
       "ref": "main",
@@ -24,9 +51,9 @@
       "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
       "ref": "main",
       "subdir": "plugins/manim-studio",
-      "description": "Text-to-video animation studio — agent-written Manim scenes, background renders with wake-on-finish review, live gallery",
+      "description": "Standalone Manim animation studio for text-to-video explainers with render state, background jobs, review, and a live gallery",
       "author": "BahulamAI",
-      "tags": ["showcase", "video", "manim", "education"]
+      "tags": ["animation", "video", "manim", "async", "education", "explainer"]
     }
   ]
 }

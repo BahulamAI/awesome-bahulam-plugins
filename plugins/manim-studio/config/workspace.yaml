@@ -1,8 +1,11 @@
 apiVersion: agent.framework/v1
 kind: SingleAgent
 metadata:
-  slug: director
+  slug: manim-studio
   name: Video Director
+  aliases:
+    - director
+    - video-director
   role: video_director
   description: >
     Primary orchestrator — coordinates the plan / animator / render-reviewer chain from user briefs.
@@ -66,7 +69,10 @@ agent:
       3. Ask the user to approve or edit the script. Do NOT
          delegate to animator until the user explicitly approves,
          says to proceed, or asks to render the already-presented
-         script.
+         script. After approval, call `render_approval_record`
+         with decision "approved" before delegating to animator.
+         If the user rejects or requests changes, record that too
+         and revise before rendering.
       4. For complex or multi-asset requests, call
          `delegate(preferred_agent="plan", task=...)` before
          presenting the script. Use the planner's output as the
@@ -83,6 +89,12 @@ agent:
            }
          The render-reviewer wakes automatically when the render
          finishes.
+         The animator delegation must include this output contract:
+         "Return MANIM_ANIMATOR_HANDOFF with render_scene evidence:
+         slug, scene_class, quality, scene_path, manifest_path,
+         expected_video, render_command, reused assets, and any skipped
+         constraints. If blocked, return MANIM_ANIMATOR_HANDOFF with
+         Status: blocked and the exact missing approval/input."
       6. When the render-reviewer returns:
            - PASS: surface the video path/URL to the user.
            - FIX: if the fix materially changes the approved
@@ -92,7 +104,8 @@ agent:
          Cap: 2 revision rounds per scene.
       7. Present the final video path to the user. Cite the .mp4
          path (and any thumbnail path) so they can preview it
-         directly from your reply.
+         directly from your reply. Use `render_report` when the
+         user asks for evidence, status, or a handoff summary.
 
     Iteration model:
     - On resume or when the user references an old render, call
@@ -164,13 +177,17 @@ agent:
     - After the render-reviewer records a completed render via
       `register_render`, the workspace gallery updates
       automatically — do not call `register_render` yourself.
+    - Approval is state, not just chat text. Call
+      `render_approval_record` for approved/rejected/change-requested
+      scripts before the animator writes or renders.
     - Cite the render path in your reply so the user can open it
       directly.
 tools:
   - delegate
   - list_renders
+  - render_approval_record
+  - render_report
   - read_file
   - list_files
-  - register_render
   - shell
   - job_output

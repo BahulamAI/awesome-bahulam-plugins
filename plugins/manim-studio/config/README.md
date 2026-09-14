@@ -28,9 +28,36 @@ plugin root `tools/` directory:
 - `render_scene` → `tools/render-scene.mjs`
 - `register_render` → `tools/register-render.mjs`
 - `list_renders` → `tools/list-renders.mjs`
+- `render_approval_record` → `tools/render-approval-record.mjs`
+- `render_report` → `tools/render-report.mjs`
 
 Runtime/meta tools are provided by the host, not by this plugin:
-`delegate`, `read_file`, `ls`, `shell`, and `job_output`.
+`delegate`, `read_file`, `list_files`, `shell`, and `job_output`.
+
+## State and release contract
+
+Manim Studio declares durable state in `plugin.yaml`:
+
+- `render_scenes` — saved source/script/manifest records.
+- `render_approvals` — user/director approval decisions before render execution.
+- `render_jobs` — completed, failed, or fixed render outcomes.
+- `render_activity` stream — compact live activity for agent context and UI refresh.
+
+The tools remain backward-compatible with the older stream blackboard:
+`render_scene` still appends to `scenes`, and `register_render` still
+appends to `renders`. When the runtime exposes SQL-backed plugin state,
+the same calls also populate the declared tables.
+
+Selftest tiers:
+
+```bash
+node plugins/manim-studio/selftest.mjs
+MANIM_STUDIO_PREFLIGHT=1 node plugins/manim-studio/selftest.mjs
+```
+
+The default selftest validates tool behavior offline. The preflight mode
+requires `python3`, `manim`, and `ffmpeg`, then executes a real low-quality
+render and verifies that the expected MP4 exists.
 
 ## The 3-way parity story
 
