@@ -54,6 +54,15 @@
       "description": "Standalone Manim animation studio for text-to-video explainers with render state, background jobs, review, and a live gallery",
       "author": "BahulamAI",
       "tags": ["animation", "video", "manim", "async", "education", "explainer"]
+    },
+    {
+      "name": "raspberry-pi",
+      "repository": "https://github.com/codehive-sr/awesome-bahulam-plugins",
+      "ref": "main",
+      "subdir": "plugins/raspberry-pi",
+      "description": "Raspberry Pi GPIO and I2C sensor operations runtime with local, SSH, and fully simulated virtual board targets, approval-gated GPIO writes, and a live board/pin/approval panel",
+      "author": "Rohit",
+      "tags": ["gpio", "hardware", "sensors", "ssh", "simulation", "iot", "state", "approvals"]
     }
   ]
 }
