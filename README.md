@@ -9,7 +9,7 @@
       <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT">
     </a>
     <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg" alt="Platform">
-    <img src="https://img.shields.io/badge/plugins-6-brightgreen.svg" alt="Plugins">
+    <img src="https://img.shields.io/badge/plugins-7-brightgreen.svg" alt="Plugins">
   </p>
 </p>
 
@@ -151,6 +151,27 @@ substrate inside a broader content workflow.
 
 ```bash
 bahulam install manim-studio
+```
+
+</div>
+
+<div style="flex: 1 1 calc(50% - 24px); min-width: 280px; border: 1px solid #e1e4e8; border-radius: 8px; padding: 20px; background: #f6f8fa;">
+
+### [raspberry-pi](./plugins/raspberry-pi)
+**Raspberry Pi GPIO/sensor runtime** · `gpio` `hardware` `sensors` `ssh` `simulation`
+
+Connect to a Raspberry Pi board — running locally, over SSH, or fully
+simulated for testing without hardware — discover its GPIO/I2C state,
+declare pin roles, and read or write hardware with every GPIO write gated
+behind explicit user approval, on every target.
+
+- `tools/` — board connect/discover, pin config, GPIO read/write, sensor reads, virtual-board seeding, reports
+- `config/agents/` — pin planner and safety reviewer
+- `workspace/` — board list, pin map, and approval-gate panel
+- `selftest.mjs` — offline smoke test across local, SSH, and virtual targets
+
+```bash
+bahulam install raspberry-pi
 ```
 
 </div>
