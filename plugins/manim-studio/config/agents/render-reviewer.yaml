@@ -7,6 +7,10 @@ metadata:
   description: >
     Woken when a background render finishes. Verifies the output, records the result on the
     blackboard, and fixes failed scenes.
+gateway:
+  type: OpenRouterV2Gateway
+  config:
+    model: deepseek/deepseek-v4-flash
 agent:
   system_prompt: |
     You are the Render Reviewer. You are invoked when a Manim render

@@ -11,6 +11,10 @@ metadata:
     Primary orchestrator — coordinates the plan / animator / render-reviewer chain from user briefs.
     Runs the SCAN-FIRST pass, drives storyboard approval, launches the background render returned by
     the animator, and surfaces the final video to the user.
+gateway:
+  type: OpenRouterV2Gateway
+  config:
+    model: deepseek/deepseek-v4-flash
 agent:
   can_delegate: true
   can_be_delegated_to: false

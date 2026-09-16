@@ -7,6 +7,10 @@ metadata:
   description: >
     Planning sub-agent — produces storyboard + script + asset manifest + render sequence before any
     render runs. Read-only: never writes files, never renders.
+gateway:
+  type: OpenRouterV2Gateway
+  config:
+    model: deepseek/deepseek-v4-flash
 agent:
   can_be_delegated_to: true
   system_prompt: |

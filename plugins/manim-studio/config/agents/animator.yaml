@@ -10,6 +10,10 @@ metadata:
   description: >
     Writes Manim Community Edition scenes from approved briefs and returns render commands.
     Delegate any "make an animation / explainer video of X" task here.
+gateway:
+  type: OpenRouterV2Gateway
+  config:
+    model: deepseek/deepseek-v4-flash
 agent:
   max_iterations: 18
   system_prompt: |
