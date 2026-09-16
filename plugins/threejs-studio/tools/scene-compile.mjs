@@ -336,8 +336,110 @@ export function compile(scene) {
     : 'THREE.ACESFilmicToneMapping';
   const exposure = num(scene.tone?.exposure, 1.0);
 
-  // scripts (user event/tick code)
-  const tickScripts = (scene.scripts || []).filter(s => s.event === 'tick').map(s => `// script:${s.id}\n(function(){ const target = scene.getObjectByName(${j(s.target)}) || _byId[${j(s.target)}]; try { ${s.code} } catch(e){ console.error(${j(s.id)}, e); } })();`).join('\n    ');
+  // scripts — tick runs every frame; click/hover wire raycaster listeners
+  const tickScripts = (scene.scripts || []).filter(s => s.event === 'tick').map(s => `// script:${s.id}\ntry { (function(){ const target = _byId[${j(s.target)}] || scene.getObjectByName(${j(s.target)}); ${s.code} })(); } catch(e){ console.error(${j(s.id)}, e); }`).join('\n    ');
+  const interactionScripts = (scene.scripts || []).filter(s => s.event === 'click' || s.event === 'hover');
+  const needsRaycaster = interactionScripts.length > 0;
+  const interactionCode = needsRaycaster ? `
+const __ray = new THREE.Raycaster();
+const __ptr = new THREE.Vector2();
+const __handlers = { click: [], hover: [] };
+${interactionScripts.map(s => `__handlers[${j(s.event)}].push({ target: ${j(s.target)}, run: (target, hit) => { try { ${s.code} } catch(e){ console.error(${j(s.id)}, e); } } });`).join('\n')}
+function __updatePointer(e) {
+  const rect = renderer.domElement.getBoundingClientRect();
+  __ptr.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  __ptr.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+}
+function __hitTest() {
+  __ray.setFromCamera(__ptr, camera);
+  return __ray.intersectObjects(scene.children, true);
+}
+renderer.domElement.addEventListener('click', (e) => {
+  __updatePointer(e);
+  const hits = __hitTest();
+  for (const h of __handlers.click) {
+    const target = _byId[h.target];
+    if (!target) continue;
+    if (hits.some(x => x.object === target || target === x.object.parent)) h.run(target, hits[0]);
+  }
+});
+renderer.domElement.addEventListener('mousemove', (e) => {
+  __updatePointer(e);
+  const hits = __hitTest();
+  for (const h of __handlers.hover) {
+    const target = _byId[h.target];
+    if (!target) continue;
+    if (hits.some(x => x.object === target || target === x.object.parent)) h.run(target, hits[0]);
+  }
+});
+` : '';
+
+  // animations — emit AnimationMixer + KeyframeTrack objects
+  const anims = scene.animations || [];
+  const needsMixer = anims.length > 0;
+  const animCode = needsMixer ? `
+const __mixers = [];
+${anims.map((clip, ci) => {
+  const tracks = (clip.tracks || []).map((tr, ti) => {
+    // property e.g. ".position" or ".rotation" or ".scale" or ".material.opacity"
+    const path = String(tr.property || '.position');
+    const times = JSON.stringify(tr.times || [0, 1]);
+    const values = JSON.stringify(tr.values || [0, 0, 0, 1, 0, 0]);
+    // Guess track class from property name
+    let cls = 'VectorKeyframeTrack';
+    if (path.endsWith('.quaternion')) cls = 'QuaternionKeyframeTrack';
+    else if (path.endsWith('.opacity') || /\.material\./.test(path) && !/color/.test(path)) cls = 'NumberKeyframeTrack';
+    return `new THREE.${cls}('${path}', ${times}, ${values})`;
+  }).join(', ');
+  return `{
+  const __clip = new THREE.AnimationClip(${j(clip.id || `clip_${ci}`)}, ${num(clip.duration, 2)}, [${tracks}]);
+  const __obj = _byId[${j(clip.target)}] || scene;
+  const __mixer = new THREE.AnimationMixer(__obj);
+  const __action = __mixer.clipAction(__clip);
+  __action.loop = ${clip.loop === false ? 'THREE.LoopOnce' : 'THREE.LoopRepeat'};
+  __action.play();
+  __mixers.push(__mixer);
+}`;
+}).join('\n')}
+` : '';
+
+  // physics — cannon-es rigid bodies
+  const physicsBodies = scene.physics || [];
+  const needsPhysics = physicsBodies.length > 0;
+  const physicsCode = needsPhysics ? `
+const __gravity = new CANNON.Vec3(0, ${num(scene.physicsGravity, -9.82)}, 0);
+const __world = new CANNON.World({ gravity: __gravity });
+const __bodies = [];
+${physicsBodies.map(b => {
+  const shape = String(b.shape || 'box').toLowerCase();
+  let shapeExpr;
+  switch (shape) {
+    case 'sphere': shapeExpr = `new CANNON.Sphere(${num(b.radius, 0.5)})`; break;
+    case 'plane':  shapeExpr = `new CANNON.Plane()`; break;
+    case 'box':
+    default: {
+      const [hx, hy, hz] = (b.halfExtents || [0.5, 0.5, 0.5]);
+      shapeExpr = `new CANNON.Box(new CANNON.Vec3(${num(hx, 0.5)}, ${num(hy, 0.5)}, ${num(hz, 0.5)}))`;
+    }
+  }
+  const pos = vec3(b.position, [0, 0, 0]);
+  return `{
+  const body = new CANNON.Body({ mass: ${num(b.mass, 0)}, shape: ${shapeExpr}, position: new CANNON.Vec3(...${pos}) });
+  ${b.restitution != null ? `body.material = new CANNON.Material({ restitution: ${num(b.restitution, 0)} });` : ''}
+  __world.addBody(body);
+  const __target = _byId[${j(b.target)}];
+  __bodies.push({ body, target: __target, applyPlaneRotation: ${shape === 'plane'} });
+}`;
+}).join('\n')}
+function __stepPhysics(dt) {
+  __world.step(1/60, dt, 3);
+  for (const { body, target, applyPlaneRotation } of __bodies) {
+    if (!target) continue;
+    target.position.copy(body.position);
+    if (!applyPlaneRotation) target.quaternion.copy(body.quaternion);
+  }
+}
+` : '';
 
   const title = scene.title || scene.slug || 'Three.js Scene';
 
@@ -345,6 +447,7 @@ export function compile(scene) {
   const loaderImports = [];
   if (ctx.needsGltf) loaderImports.push(`import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';`);
   if (ctx.needsHdri) loaderImports.push(`import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';`);
+  if (needsPhysics) loaderImports.push(`import * as CANNON from 'https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js';`);
 
   return `<!doctype html>
 <html lang="en">
@@ -438,6 +541,15 @@ ${nodeCode}
 ${(scene.nodes || []).map(n => `_byId[${j(n.id)}] = _n_${sanitizeVar(n.id)};`).join('\n  ')}
 ${attachCode}
 
+// ── Animation ───────────────────────────────────────────────────────
+${animCode}
+
+// ── Physics ─────────────────────────────────────────────────────────
+${physicsCode}
+
+// ── Interaction (click/hover) ───────────────────────────────────────
+${interactionCode}
+
 // ── Resize ──────────────────────────────────────────────────────────
 window.addEventListener('resize', () => {
   const w = window.innerWidth, h = window.innerHeight;
@@ -451,6 +563,8 @@ function __tick() {
   requestAnimationFrame(__tick);
   const dt = __clock.getDelta();
   ${controls.code ? 'if (controls && controls.update) controls.update(dt);' : ''}
+  ${needsMixer ? 'for (const m of __mixers) m.update(dt);' : ''}
+  ${needsPhysics ? '__stepPhysics(dt);' : ''}
   ${tickScripts}
   renderer.render(scene, camera);
 }

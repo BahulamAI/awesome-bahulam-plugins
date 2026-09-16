@@ -53,29 +53,35 @@ node plugins/threejs-studio/selftest.mjs
 ## Agent topology
 
 ```
-                 ┌─ Scene Director (interactive) ────┐
-                 │                                   │
-                 ▼                                   ▼
-              Planner (read-only)              Developer (fallback,
-                                                one-shot raw HTML)
-                 │
-       ┌────┬────┼────┬─────────┐
-       ▼    ▼    ▼    ▼         ▼
-    Layout  Mat  Light  Camera  (+ Behavior/Animation/Critic in Phase 2)
-       │    │    │    │
-       └────┴────┴────┘
-                 ▼
-              Reviewer (validates HTML) ─► Renderer (MP4 export)
+                    ┌─ Scene Director (interactive) ─┐
+                    │                                 │
+                    ▼                                 ▼
+                Planner                         Developer (fallback,
+             (read-only)                         one-shot raw HTML)
+                    │
+       ┌───┬───┬────┼────┬────┬───┬──────┐
+       ▼   ▼   ▼    ▼    ▼    ▼   ▼      ▼
+    Asset Layout Mat Light Cam Anim  Behavior
+       │   │   │    │    │    │    │
+       └───┴───┴────┴────┴────┴────┘
+                    ▼
+                 Critic (VLM verdict) ──► Reviewer (HTML validity)
+                    ▼
+                 Renderer (MP4 export via headless Chromium + ffmpeg)
 ```
 
 | Agent | Role | Owns | File |
 |-------|------|------|------|
 | **Scene Director** | Orchestrator, user-facing | nothing directly | `config/workspace.yaml` |
 | **Plan** | Scene breakdown, feature list (read-only) | — | `config/agents/plan.yaml` |
+| **Asset** | Mesh/texture generation, glTF/HDRI import | `assets.*`, `nodes[].{type:gltf}` | `config/agents/asset.yaml` |
 | **Layout** | Nodes, hierarchy, transforms | `nodes[].{type,geometry,parent,position,...}` | `config/agents/layout.yaml` |
 | **Material** | PBR materials, textures | `materials.*`, `nodes[].materialId` | `config/agents/material.yaml` |
 | **Lighting** | Lights, HDRI, exposure | `nodes[]{type:light}`, `background`, `tone` | `config/agents/lighting.yaml` |
 | **Camera** | Camera type, framing, controls | `camera.*` | `config/agents/camera.yaml` |
+| **Animation** | Keyframes + procedural motion | `animations[]`, tick `scripts[]` | `config/agents/animation.yaml` |
+| **Behavior** | Physics + interaction scripts | `physics[]`, `scripts[]` | `config/agents/behavior.yaml` |
+| **Critic** | Screenshots + VLM critique (read-only) | — | `config/agents/critic.yaml` |
 | **Developer** | One-shot raw HTML (fallback) | writes `index.html` directly | `config/agents/developer.yaml` |
 | **Reviewer** | Validates HTML, fixes trivial issues | `index.html` last-mile | `config/agents/reviewer.yaml` |
 | **Renderer** | MP4 export via headless Chromium + ffmpeg | video file only | `config/agents/renderer.yaml` |
@@ -106,6 +112,27 @@ lights, scripts).
 
 **Camera Agent**
 - `set_camera`, `frame_scene` (auto-fit to bounds).
+
+**Asset Agent**
+- `generate_mesh` — text→3D via configured provider (env `THREEJS_MESH_PROVIDER=meshy|local`).
+- `generate_texture` — text→image (env `THREEJS_TEXTURE_PROVIDER=fal|local`).
+- `import_gltf` — download/copy a `.glb`/`.gltf` into `assets/`.
+- `search_asset_library` — curated Poly Haven / Khronos catalog.
+- `decimate_mesh` — record decimation intent (real reduction: Phase 3).
+- `list_assets` — read the manifest.
+
+**Behavior Agent**
+- `add_physics_body` — cannon-es rigid bodies (`box`/`sphere`/`plane`).
+- `add_script` — raw JS on `tick`/`click`/`hover` events.
+- `wire_event` — shortcut for common actions (`toggle_visible`, `swap_material`, `translate`, `rotate`, `log`).
+
+**Animation Agent**
+- `add_keyframe` — build `THREE.AnimationClip` keyframe by keyframe.
+- `add_procedural_motion` — `spin`/`orbit`/`oscillate`/`bob` via tick script.
+
+**Critic Agent**
+- `render_screenshot` — puppeteer captures N camera angles. Degrades to plan-only when puppeteer is missing.
+- `evaluate_scene` — VLM verdict via configured provider (env `THREEJS_VLM_PROVIDER=anthropic|local`).
 
 **One-shot fallback**
 - `write_threejs_scene` — write raw HTML from a JS snippet. Bypasses the
@@ -141,35 +168,29 @@ plugins/threejs-studio/
 │   ├── lib.mjs                       # DSL helpers + state
 │   ├── scene-compile.mjs             # DSL → HTML compiler
 │   ├── scene-io.mjs                  # loadOrCreate / saveAndSync
-│   ├── create-scene.mjs
-│   ├── get-scene.mjs
-│   ├── snapshot-scene.mjs
-│   ├── create-node.mjs               # Layout
-│   ├── set-transform.mjs
-│   ├── reparent-node.mjs
-│   ├── delete-node.mjs
-│   ├── align-nodes.mjs
-│   ├── measure-bounds.mjs
-│   ├── create-material.mjs           # Material
-│   ├── set-material-property.mjs
-│   ├── assign-material.mjs
-│   ├── add-light.mjs                 # Lighting
-│   ├── set-environment.mjs
-│   ├── set-exposure.mjs
-│   ├── set-camera.mjs                # Camera
-│   ├── frame-scene.mjs
+│   ├── create-scene.mjs / get-scene.mjs / snapshot-scene.mjs
+│   ├── create-node.mjs / set-transform.mjs / reparent-node.mjs
+│   ├── delete-node.mjs / align-nodes.mjs / measure-bounds.mjs
+│   ├── create-material.mjs / set-material-property.mjs / assign-material.mjs
+│   ├── add-light.mjs / set-environment.mjs / set-exposure.mjs
+│   ├── set-camera.mjs / frame-scene.mjs
+│   ├── generate-mesh.mjs / generate-texture.mjs / import-gltf.mjs
+│   ├── search-asset-library.mjs / decimate-mesh.mjs / list-assets.mjs
+│   ├── add-physics-body.mjs / add-script.mjs / wire-event.mjs
+│   ├── add-keyframe.mjs / add-procedural-motion.mjs
+│   ├── render-screenshot.mjs / evaluate-scene.mjs
 │   ├── write-threejs-scene.mjs       # Fallback (raw HTML)
-│   ├── register-render.mjs           # Records
-│   ├── list-renders.mjs
-│   ├── render-approval-record.mjs
-│   ├── render-report.mjs
-│   └── render-threejs-video.mjs      # MP4 export
+│   ├── register-render.mjs / list-renders.mjs
+│   ├── render-approval-record.mjs / render-report.mjs
+│   ├── render-threejs-video.mjs      # MP4 export
+│   └── providers/                    # mesh / texture / vlm adapters (local + real)
 ├── config/
 │   ├── workspace.yaml                # Scene Director
-│   ├── agents/                       # layout / material / lighting / camera / plan / developer / reviewer / renderer
+│   ├── agents/                       # asset / layout / material / lighting / camera / animation / behavior / critic / plan / developer / reviewer / renderer
 │   └── reference/                    # scene-dsl.md + agent-contracts.md + scene-rules.md
 ├── workspace/
-│   └── studio.html                   # gallery panel
+│   ├── studio.html                   # gallery panel
+│   └── viewport.html                 # live iframe of selected scene
 ├── selftest.mjs                      # 40+ assertions covering every tool
 └── README.md
 ```
@@ -196,16 +217,47 @@ User: "Make a red leather chair on a wood floor, warm afternoon light"
 Every intermediate `scene.json` is versioned in `<cwd>/lounge/snapshots/` so
 you can revert to any prior state.
 
-## Roadmap — Phase 2
+## Provider configuration
 
-- **Asset Agent** — mesh generation (Meshy/Rodin/Tripo), texture generation
-  (Flux/SD), Poly Haven / Sketchfab search, glTF import, decimation.
-- **Behavior Agent** — physics (`cannon-es`), sandboxed event scripts,
-  interaction wiring.
-- **Animation Agent** — keyframes, morph targets, GSAP integration.
-- **Critic Agent** — headless screenshot capture (reusing puppeteer),
-  VLM-based scene critique, closed feedback loop.
-- **Viewport panel** — live scene preview reading `scene.json` directly.
+All Phase 2 tools work with **zero credentials** — local stubs write real
+files (placeholder .gltf, solid-color PNG, heuristic critique). Upgrade
+to real providers via env vars:
+
+```bash
+# Mesh generation
+export THREEJS_MESH_PROVIDER=meshy
+export MESHY_API_KEY=...
+
+# Texture generation
+export THREEJS_TEXTURE_PROVIDER=fal
+export FAL_KEY=...
+
+# VLM critic
+export THREEJS_VLM_PROVIDER=anthropic
+export ANTHROPIC_API_KEY=...
+export THREEJS_VLM_MODEL=claude-sonnet-4-6   # optional override
+```
+
+Tools accept `provider: "..."` in args to override per call.
+
+## Panels
+
+Two workspace views ship with the plugin:
+
+| Panel | Purpose |
+|-------|---------|
+| `Three.js Studio` (`workspace/studio.html`) | Scene gallery — list, status, paths, open in browser. |
+| `Viewport` (`workspace/viewport.html`) | Live iframe of the selected scene's `index.html` with a scene picker + refresh. |
+
+## Roadmap — Phase 3
+
+- **Real mesh decimation** — apply `gltf-transform` in a background job
+  when `decimation.status === 'pending'`.
+- **Live Poly Haven / Sketchfab search** — replace curated catalog with API.
+- **Additional providers** — Rodin, Tripo, Stability, OpenAI vision.
+- **Shader Agent** — safe ShaderMaterial authoring with uniform bindings.
+- **Timeline panel** — visualize + edit animations from `scene.json`.
+- **Scene diffing** — inspect changes between snapshots side-by-side.
 
 ## Migration from v0.1.0
 

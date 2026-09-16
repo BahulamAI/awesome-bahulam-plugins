@@ -111,13 +111,62 @@ Texture slots (paths relative to scene folder or absolute URLs):
 
 ```jsonc
 "scripts": [
-  { "id": "spin_table", "target": "table", "event": "tick", "code": "target.rotation.y += 0.5 * (dt||0.016);" }
+  { "id": "spin_table", "target": "table", "event": "tick",  "code": "target.rotation.y += 0.5 * (dt||0.016);" },
+  { "id": "flip_lid",   "target": "lid",   "event": "click", "code": "target.rotation.x += Math.PI/2;" },
+  { "id": "hover_glow", "target": "cta",   "event": "hover", "code": "target.material.emissiveIntensity = 0.4;" }
 ]
 ```
 
-The runtime injects `target`, `scene`, `dt` (delta seconds), and Three.js
-globals into the closure. Kept intentionally minimal — for anything
-complex use the developer fallback path.
+The runtime injects `target` (the Object3D matched by the id), `scene`,
+`dt` (tick only), `hit` (click/hover: first raycast intersection), and
+the `THREE` namespace into each closure. `click`/`hover` scripts trigger
+a `Raycaster` sweep of the scene on every mousemove/click.
+
+## Animations
+
+```jsonc
+"animations": [
+  { "id": "chair_wobble", "target": "chair", "duration": 2, "loop": true,
+    "tracks": [
+      { "property": ".rotation", "times": [0, 1, 2], "values": [0,0,0,  0,0.2,0,  0,0,0] }
+    ]
+  }
+]
+```
+
+Each clip becomes a `THREE.AnimationClip` on a `THREE.AnimationMixer` bound
+to the target node. Track class is inferred from the property path:
+
+- `.position` / `.rotation` / `.scale` → `VectorKeyframeTrack`
+- `.quaternion` → `QuaternionKeyframeTrack`
+- `.material.opacity` / other scalars → `NumberKeyframeTrack`
+
+## Physics
+
+```jsonc
+"physics": [
+  { "id": "ground", "target": "floor", "shape": "plane", "mass": 0 },
+  { "id": "chair_body", "target": "chair", "shape": "box",
+    "halfExtents": [0.225, 0.45, 0.225], "mass": 5, "restitution": 0.1 }
+]
+```
+
+When `physics.length > 0`, the compiler emits `cannon-es` (from CDN),
+constructs a `CANNON.World`, and steps it each frame. Body positions/
+rotations sync to their target nodes.
+
+## Assets
+
+```jsonc
+"assets": {
+  "chair_mesh":   { "kind": "gltf",    "path": "assets/chair.glb", "provider": "meshy", "prompt": "walnut chair" },
+  "wood_diffuse": { "kind": "texture", "path": "assets/wood.png",  "provider": "fal",   "prompt": "walnut wood grain" },
+  "sky_hdri":     { "kind": "hdri",    "path": "assets/sky.hdr",   "provider": "polyhaven" }
+}
+```
+
+Registered via `generate_mesh`, `generate_texture`, `import_gltf`, or
+`search_asset_library` + `import_gltf`.
 
 ## Version + migration
 

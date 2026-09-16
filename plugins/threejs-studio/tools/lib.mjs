@@ -155,7 +155,13 @@ export function emptyScene({ slug, title, width = 800, height = 600 } = {}) {
         helper: { type: 'grid', size: 20, divisions: 20, color1: '#444488', color2: '#333366' },
       },
     ],
+    // Asset manifest: id -> { kind: "mesh"|"texture"|"gltf", path, provider, prompt? }
+    assets: {},
+    // Animation clips: { id, target, duration, loop, tracks: [{ property, times, values, interpolation? }] }
+    animations: [],
+    // Sandboxed event/tick scripts: { id, target?, event: "tick"|"click"|"hover", code }
     scripts: [],
+    // cannon-es rigid-body specs: { id, target, shape, mass, position?, restitution?, friction? }
     physics: [],
     post: {},
     meta: { created_at: t, updated_at: t },

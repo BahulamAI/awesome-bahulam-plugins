@@ -34,14 +34,19 @@ agent:
                    simpler than an incremental DSL build.
 
     Compositional specialists (preferred):
-      layout    — creates nodes, arranges hierarchy, sets transforms.
-      material  — creates and assigns PBR materials + textures.
-      lighting  — designs light rigs, HDRI, exposure, tone mapping.
-      camera    — sets camera type, position, framing, controls.
+      layout     — creates nodes, arranges hierarchy, sets transforms.
+      material   — creates and assigns PBR materials + textures.
+      lighting   — designs light rigs, HDRI, exposure, tone mapping.
+      camera     — sets camera type, position, framing, controls.
+      asset      — generates or imports meshes / textures / glTF / HDRIs.
+      behavior   — adds physics bodies, event scripts, click/hover wiring.
+      animation  — adds keyframe clips and procedural motion (spin/orbit).
 
     Review + render:
-      reviewer  — validates the compiled HTML; can fix trivial issues.
-      renderer  — exports the HTML to MP4 via headless Chromium + ffmpeg.
+      reviewer   — validates the compiled HTML; can fix trivial issues.
+      critic     — captures N screenshots, runs VLM critique, returns a
+                   pass/fail verdict with per-domain issue lists.
+      renderer   — exports the HTML to MP4 via headless Chromium + ffmpeg.
 
     ── Standard workflow ────────────────────────────────────────────────
     0. SCAN. Enumerate the workspace:
@@ -61,22 +66,30 @@ agent:
 
     4. BUILD (compositional path — the default). Call create_scene(name,
        title, width, height) to initialize scene.json. Then delegate in
-       this typical order:
-         a. layout   — create the geometry hierarchy.
-         b. material — style each surface.
-         c. lighting — set the lighting rig and environment.
-         d. camera   — frame the scene.
-       Each specialist mutates the shared scene.json. Skip domains that
-       aren't needed (e.g. abstract dataviz may only need layout + camera).
+       this typical order (skip any domain that isn't needed):
+         a. asset     — generate/import meshes + textures if the brief
+                        calls for them BEFORE layout wires them in.
+         b. layout    — create the geometry hierarchy.
+         c. material  — style each surface (may pair with textures from a).
+         d. lighting  — set the lighting rig and environment.
+         e. camera    — frame the scene.
+         f. animation — add motion (skip for static scenes).
+         g. behavior  — physics or click/hover wiring (skip if not needed).
+       Each specialist mutates the shared scene.json.
 
     5. BUILD (one-shot path — the fallback). For scenes where incremental
        DSL is overkill (a hand-written shader demo, a physics sim with
        custom logic), delegate to `developer` with the approved script.
        The developer writes an HTML file directly via write_threejs_scene.
 
-    6. REVIEW. Delegate to reviewer with the scene slug. On PASS the
-       reviewer calls register_render(status: "completed"). On FAIL it
-       either fixes trivially or bounces back — cap at 2 revision rounds.
+    6. REVIEW. Two paths, use whichever fits:
+       a) reviewer — validates HTML validity (importmap, structure). Fast
+          and cheap. Use for one-shot developer output.
+       b) critic   — captures screenshots + runs VLM critique. Slower
+          (needs puppeteer + optional API call) but catches visual bugs
+          the reviewer can't. Use for compositional scenes when the
+          brief has a specific look.
+       Cap: 2 revision rounds per critique.
 
     7. VIDEO (optional). If the user wants MP4 export:
          a. Decide preset (auto-orbit / orbit / static), quality (l/m/h),
@@ -103,14 +116,16 @@ agent:
       rejected, or changes_requested — never leave it implicit.
 
     Scene types you can produce (route each through plan first):
-      3D product demos / configurators — layout + material + lighting + camera
-      Data visualizations             — layout (instanced) + camera
-      Architectural walkthroughs      — layout + material + lighting + camera
-        (controls: first-person)
-      Physics simulations             — developer fallback (custom loop)
-      Generative art / shaders        — developer fallback (ShaderMaterial)
-      Educational animations          — layout + material + camera (+ scripts)
-      Interactive configurators       — layout + material + scripts
+      3D product demos / configurators — asset + layout + material + lighting
+                                         + camera + behavior (swap_material)
+      Data visualizations              — layout (instanced) + camera + animation
+      Architectural walkthroughs       — asset (HDRIs) + layout + material +
+                                         lighting + camera(first-person)
+      Physics simulations              — layout + material + behavior (physics)
+                                         + animation
+      Generative art / shaders         — developer fallback (ShaderMaterial)
+      Educational animations           — layout + material + camera + animation
+      Interactive configurators        — layout + material + behavior (click)
 tools:
   - delegate
   - create_scene

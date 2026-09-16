@@ -33,6 +33,21 @@ import { call as setExposure } from './tools/set-exposure.mjs';
 import { call as setCamera } from './tools/set-camera.mjs';
 import { call as frameScene } from './tools/frame-scene.mjs';
 
+// Phase 2 tools
+import { call as generateMesh } from './tools/generate-mesh.mjs';
+import { call as generateTexture } from './tools/generate-texture.mjs';
+import { call as importGltf } from './tools/import-gltf.mjs';
+import { call as searchAssetLibrary } from './tools/search-asset-library.mjs';
+import { call as decimateMesh } from './tools/decimate-mesh.mjs';
+import { call as listAssets } from './tools/list-assets.mjs';
+import { call as addPhysicsBody } from './tools/add-physics-body.mjs';
+import { call as addScript } from './tools/add-script.mjs';
+import { call as wireEvent } from './tools/wire-event.mjs';
+import { call as addKeyframe } from './tools/add-keyframe.mjs';
+import { call as addProceduralMotion } from './tools/add-procedural-motion.mjs';
+import { call as renderScreenshot } from './tools/render-screenshot.mjs';
+import { call as evaluateScene } from './tools/evaluate-scene.mjs';
+
 let failures = 0;
 const ok = (label, cond, detail) => {
   if (cond) console.log(`ok   ${label}`);
@@ -284,6 +299,169 @@ const cwd = sandbox;
 
   const report = await renderReport({ slug: 'cafe' }, { state: fakeState });
   ok('render_report returns evidence', report.success === true);
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// PHASE 2 — assets, behavior, animation, critic
+// ══════════════════════════════════════════════════════════════════════
+
+// Force local providers so no network / API keys are needed.
+delete process.env.MESHY_API_KEY;
+delete process.env.FAL_KEY;
+delete process.env.ANTHROPIC_API_KEY;
+process.env.THREEJS_MESH_PROVIDER = 'local';
+process.env.THREEJS_TEXTURE_PROVIDER = 'local';
+process.env.THREEJS_VLM_PROVIDER = 'local';
+
+// Fresh scene for phase 2 tests
+{
+  const setup = await createScene({ name: 'playroom', title: 'Playroom', width: 900, height: 600, cwd }, { state: fakeState });
+  ok('phase2: create_scene', setup.success);
+}
+
+// ── Asset: generate_mesh (local stub) ─────────────────────────────────
+{
+  const mesh = await generateMesh({ slug: 'playroom', prompt: 'a red chair', cwd }, { state: fakeState });
+  ok('generate_mesh (local) succeeds', mesh.success && mesh.output.provider.includes('local'));
+  ok('generate_mesh writes asset file', fs.existsSync(path.join(cwd, 'playroom', mesh.output.asset_path)));
+  ok('generate_mesh registers asset in manifest', mesh.output.asset_id.startsWith('mesh_'));
+  ok('generate_mesh registers node when register_node=true', mesh.output.node_id != null);
+}
+
+// ── Asset: generate_texture (local stub, real PNG) ────────────────────
+{
+  const tex = await generateTexture({ slug: 'playroom', prompt: 'wood grain oak', cwd }, { state: fakeState });
+  ok('generate_texture (local) succeeds', tex.success && tex.output.provider.includes('local'));
+  const texAbs = path.join(cwd, 'playroom', tex.output.asset_path);
+  ok('generate_texture writes PNG', fs.existsSync(texAbs));
+  const png = fs.readFileSync(texAbs);
+  ok('generate_texture PNG has valid signature', png[0] === 0x89 && png[1] === 0x50 && png[2] === 0x4e && png[3] === 0x47);
+
+  // Apply to a material
+  await createMaterial({ slug: 'playroom', id: 'floor_wood', type: 'standard', roughness: 0.8, metalness: 0, cwd }, { state: fakeState });
+  const applied = await generateTexture({ slug: 'playroom', prompt: 'wood floor', apply_to: 'floor_wood', cwd }, { state: fakeState });
+  ok('generate_texture apply_to attaches map', applied.success && applied.output.applied_to === 'floor_wood');
+}
+
+// ── Asset: search_asset_library + import_gltf (relative path) ─────────
+{
+  const search = await searchAssetLibrary({ query: 'duck sample' });
+  ok('search_asset_library returns hits', search.success && search.output.count > 0);
+
+  // Import a local asset that already exists in the scene folder
+  const scene = JSON.parse(fs.readFileSync(path.join(cwd, 'playroom', 'scene.json'), 'utf-8'));
+  const existingAsset = Object.values(scene.assets)[0];
+  const imp = await importGltf({ slug: 'playroom', src: existingAsset.path, id: 'imported_local', cwd }, { state: fakeState });
+  ok('import_gltf relative path succeeds', imp.success && imp.output.asset_id === 'imported_local');
+}
+
+// ── Asset: decimate_mesh (intent only) + list_assets ──────────────────
+{
+  const scene = JSON.parse(fs.readFileSync(path.join(cwd, 'playroom', 'scene.json'), 'utf-8'));
+  const firstMeshAssetId = Object.entries(scene.assets).find(([, a]) => a.kind === 'mesh')?.[0];
+  const dec = await decimateMesh({ slug: 'playroom', asset_id: firstMeshAssetId, target_tris: 500, cwd }, { state: fakeState });
+  ok('decimate_mesh records intent', dec.success && dec.output.decimation.target_tris === 500);
+
+  const list = await listAssets({ slug: 'playroom', cwd });
+  ok('list_assets returns manifest', list.success && list.output.count >= 3);
+  const decEntry = list.output.assets.find(a => a.id === firstMeshAssetId);
+  ok('list_assets shows decimation intent', decEntry?.decimation?.status === 'pending');
+}
+
+// ── Behavior: physics ─────────────────────────────────────────────────
+{
+  // Add a static floor + dynamic box
+  await createNode({ slug: 'playroom', type: 'mesh', id: 'floor', geometry: { type: 'plane', params: { width: 20, height: 20 } }, rotation: [-1.5708, 0, 0], receiveShadow: true, cwd }, { state: fakeState });
+  await createNode({ slug: 'playroom', type: 'mesh', id: 'ball', geometry: { type: 'sphere', params: { radius: 0.5 } }, position: [0, 3, 0], castShadow: true, cwd }, { state: fakeState });
+
+  const floorBody = await addPhysicsBody({ slug: 'playroom', target: 'floor', shape: 'plane', mass: 0, cwd }, { state: fakeState });
+  ok('add_physics_body (plane, static)', floorBody.success && floorBody.output.body.mass === 0);
+
+  const ballBody = await addPhysicsBody({ slug: 'playroom', target: 'ball', shape: 'sphere', radius: 0.5, mass: 1, restitution: 0.6, cwd }, { state: fakeState });
+  ok('add_physics_body (sphere, dynamic)', ballBody.success && ballBody.output.body.restitution === 0.6);
+
+  const badTarget = await addPhysicsBody({ slug: 'playroom', target: 'ghost', shape: 'box', cwd }, { state: fakeState });
+  ok('add_physics_body rejects missing target', badTarget.success === false);
+}
+
+// ── Behavior: scripts + wire_event ────────────────────────────────────
+{
+  const spin = await addScript({ slug: 'playroom', target: 'ball', event: 'tick', code: 'target.rotation.y += 0.02;', cwd }, { state: fakeState });
+  ok('add_script tick', spin.success && spin.output.event === 'tick');
+
+  const click = await wireEvent({ slug: 'playroom', source: 'ball', event: 'click', action: 'toggle_visible', cwd }, { state: fakeState });
+  ok('wire_event click toggle_visible', click.success && click.output.action === 'toggle_visible');
+
+  const hover = await wireEvent({ slug: 'playroom', source: 'ball', event: 'hover', action: 'log', value: 'hover fired', cwd }, { state: fakeState });
+  ok('wire_event hover log', hover.success);
+
+  const badEvt = await addScript({ slug: 'playroom', target: 'ball', event: 'bogus', code: '/* nop */', cwd }, { state: fakeState });
+  ok('add_script rejects unknown event', badEvt.success === false);
+}
+
+// ── Animation: keyframes + procedural ─────────────────────────────────
+{
+  const clip = await addKeyframe({
+    slug: 'playroom', target: 'ball', clip_id: 'bounce', duration: 2, loop: true,
+    property: '.position',
+    times: [0, 0.5, 1, 1.5, 2],
+    values: [0, 3, 0,  0, 0.5, 0,  0, 3, 0,  0, 0.5, 0,  0, 3, 0],
+    cwd,
+  }, { state: fakeState });
+  ok('add_keyframe .position', clip.success && clip.output.clip_id === 'bounce');
+
+  const clip2 = await addKeyframe({
+    slug: 'playroom', target: 'ball', clip_id: 'bounce',
+    property: '.rotation',
+    times: [0, 1, 2],
+    values: [0, 0, 0,  0, 3.14, 0,  0, 6.28, 0],
+    cwd,
+  }, { state: fakeState });
+  ok('add_keyframe appends to existing clip', clip2.success && clip2.output.tracks === 2);
+
+  const spin = await addProceduralMotion({ slug: 'playroom', target: 'floor', kind: 'spin', axis: 'y', speed: 0.2, cwd }, { state: fakeState });
+  ok('add_procedural_motion spin', spin.success && spin.output.motion.kind === 'spin');
+
+  const bob = await addProceduralMotion({ slug: 'playroom', target: 'ball', kind: 'bob', amplitude: 0.3, cwd }, { state: fakeState });
+  ok('add_procedural_motion bob', bob.success);
+}
+
+// ── Compiled HTML contains new features ───────────────────────────────
+{
+  const html = fs.readFileSync(path.join(cwd, 'playroom', 'index.html'), 'utf-8');
+  ok('compiled HTML pulls cannon-es CDN when physics present', html.includes('cannon-es'));
+  ok('compiled HTML sets up AnimationMixer for keyframes', html.includes('AnimationMixer'));
+  ok('compiled HTML wires click / hover raycaster', html.includes('__ray') && html.includes("addEventListener('click'"));
+  ok('compiled HTML has physics step loop', html.includes('__stepPhysics'));
+  ok('compiled HTML injects tick scripts', html.includes('target.rotation.y += 0.02'));
+  ok('compiled HTML has no unresolved template markers', !html.includes('${'));
+}
+
+// ── Critic: render_screenshot (puppeteer optional) ────────────────────
+{
+  const shot = await renderScreenshot({ slug: 'playroom', cwd }, { state: fakeState });
+  ok('render_screenshot succeeds (plan or captured)', shot.success);
+  ok('render_screenshot returns shot list', Array.isArray(shot.output.shots) && shot.output.shots.length >= 1);
+  ok('render_screenshot mode is plan-only or captured', ['plan-only', 'captured'].includes(shot.output.mode));
+}
+
+// ── Critic: evaluate_scene with local heuristic ───────────────────────
+{
+  const verdict = await evaluateScene({ slug: 'playroom', criteria: 'a nice bouncing ball on a floor', cwd }, { state: fakeState });
+  ok('evaluate_scene (local) returns verdict', verdict.success && verdict.output.provider.startsWith('local'));
+  ok('evaluate_scene pass=true (playroom has lights + renderables)', verdict.output.pass === true);
+}
+
+// ── Critic: negative test — empty scene fails heuristic ───────────────
+{
+  await createScene({ name: 'empty', cwd }, { state: fakeState });
+  // Strip out default lights + grid to force a failure
+  const emptyPath = path.join(cwd, 'empty', 'scene.json');
+  const empty = JSON.parse(fs.readFileSync(emptyPath, 'utf-8'));
+  empty.nodes = [];
+  fs.writeFileSync(emptyPath, JSON.stringify(empty));
+  const verdict = await evaluateScene({ slug: 'empty', cwd });
+  ok('evaluate_scene flags empty scene', verdict.success && verdict.output.pass === false && verdict.output.issues.length > 0);
 }
 
 // ── Cleanup ─────────────────────────────────────────────────────────────

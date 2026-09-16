@@ -13,6 +13,10 @@ to.
 | Materials, shaders, textures | **Material** | `materials.*`, `nodes[].materialId` |
 | Lights, HDRI, tone mapping, exposure | **Lighting** | `nodes[].{type:light}`, `background`, `tone` |
 | Camera type / framing / controls | **Camera** | `camera.*` |
+| Asset acquisition (mesh/tex/gltf/hdri) | **Asset** | `assets.*`, `nodes[].{type:gltf, asset}`, `materials.*.map?` |
+| Physics + event scripts + interactions | **Behavior** | `physics[]`, `scripts[]` |
+| Keyframe clips + procedural motion | **Animation** | `animations[]`, `scripts[]` (tick) |
+| Visual verification (screenshot + VLM) | **Critic** (read-only) | — |
 | Approved brief / plan | **Plan** (read-only) | — |
 | HTML validity fixes | **Reviewer** | `index.html` (last-mile only) |
 | MP4 export | **Renderer** | (no scene mutation; writes video file) |
@@ -74,11 +78,18 @@ If a specialist cannot complete its task because:
 
 | Task | Right agent |
 |---|---|
-| "Add a chair" | Layout |
+| "Add a chair" | Layout (placeholder box) OR Asset (generate mesh) |
 | "Make the chair leather red" | Material |
+| "Give me a walnut wood texture" | Asset (generate_texture) |
+| "Import this .glb from a URL" | Asset (import_gltf) |
+| "Find an outdoor HDRI" | Asset (search_asset_library) → Lighting (set_environment) |
 | "Warmer light" | Lighting |
 | "Zoom in on the chair" | Camera |
-| "Add physics so the chair falls over" | Developer (fallback) |
+| "Add physics so the chair falls over" | Behavior (add_physics_body) |
+| "Spin the logo forever" | Animation (add_procedural_motion) |
+| "Click to swap the material" | Behavior (wire_event) |
+| "Fade the intro title from 0 to 1" | Animation (add_keyframe .material.opacity) |
 | "Render a 10s video" | Renderer (via Director) |
-| "Fix the black screen" | Lighting (usually — check for lights) |
+| "Does this scene look right?" | Critic |
+| "Fix the black screen" | Lighting (usually — check for lights) or Critic (diagnose first) |
 | "Nothing renders" | Reviewer (HTML validity) |

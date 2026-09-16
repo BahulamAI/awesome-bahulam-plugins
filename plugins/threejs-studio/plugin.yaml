@@ -2,15 +2,19 @@ apiVersion: bahulam.plugin/1
 kind: Plugin
 metadata:
   name: threejs-studio
-  version: 0.2.0
+  version: 0.3.0
   description: >
     Compositional Three.js content creation studio. Scenes are stored as a
     JSON DSL and compiled to a self-contained HTML document on every
-    mutation. Domain specialists (layout, material, lighting, camera) each
-    own a slice of the DSL and are orchestrated by a Scene Director.
-    Supports product demos, data visualizations, architectural walkthroughs,
-    physics simulations, generative art, educational animations, and MP4
-    video export via headless Chromium.
+    mutation. Domain specialists (layout / material / lighting / camera /
+    asset / behavior / animation) each own a slice of the DSL and are
+    orchestrated by a Scene Director. A Critic Agent closes the loop by
+    capturing screenshots and evaluating them via a VLM. Provider adapters
+    (Meshy, Fal, Anthropic) plug in via env vars; local stubs keep every
+    tool chain green with zero credentials. Supports product demos,
+    configurators, data visualizations, architectural walkthroughs, physics
+    simulations, generative art, educational animations, interactive
+    experiences, and MP4 video export via headless Chromium.
   author: BahulamAI
   repository: https://github.com/BahulamAI/awesome-bahulam-plugins
 
@@ -390,6 +394,238 @@ config:
           cwd:       { type: string }
         required: [slug]
 
+    # ── Asset Agent ─────────────────────────────────────────────────
+    - name: generate_mesh
+      description: >
+        Text→3D via the configured mesh provider (env
+        THREEJS_MESH_PROVIDER=meshy|local). Local fallback writes a
+        placeholder primitive .gltf so the tool chain always completes.
+        By default also registers a `gltf` node in the scene.
+      tool: ./tools/generate-mesh.mjs
+      parameters:
+        type: object
+        properties:
+          slug:          { type: string }
+          prompt:        { type: string }
+          id:            { type: string, description: "Stable asset id." }
+          provider:      { type: string, description: "Override THREEJS_MESH_PROVIDER for this call." }
+          seed:          { type: integer }
+          register_node: { type: boolean, description: "Default true." }
+          node_id:       { type: string }
+          parent:        { type: string }
+          position:      { type: array, items: { type: number } }
+          cwd:           { type: string }
+        required: [slug, prompt]
+
+    - name: generate_texture
+      description: >
+        Text→image via the configured texture provider (env
+        THREEJS_TEXTURE_PROVIDER=fal|local). Local fallback writes a
+        solid-color PNG matched to keyword palette. Optionally applies
+        the texture as the `map` slot of an existing material.
+      tool: ./tools/generate-texture.mjs
+      parameters:
+        type: object
+        properties:
+          slug:     { type: string }
+          prompt:   { type: string }
+          id:       { type: string }
+          size:     { type: integer }
+          provider: { type: string }
+          apply_to: { type: string, description: "Material id to receive the texture as `map`." }
+          cwd:      { type: string }
+        required: [slug, prompt]
+
+    - name: import_gltf
+      description: >
+        Register an existing .glb / .gltf asset (URL or local path) into
+        the scene folder and, by default, add a node that references it.
+      tool: ./tools/import-gltf.mjs
+      parameters:
+        type: object
+        properties:
+          slug:          { type: string }
+          src:           { type: string, description: "URL or absolute/relative file path." }
+          id:            { type: string, description: "Asset id (default: filename stem)." }
+          register_node: { type: boolean }
+          node_id:       { type: string }
+          parent:        { type: string }
+          position:      { type: array, items: { type: number } }
+          rotation:      { type: array, items: { type: number } }
+          scale:         { type: array, items: { type: number } }
+          cwd:           { type: string }
+        required: [slug, src]
+
+    - name: search_asset_library
+      description: >
+        Search a curated catalog of free assets (Poly Haven HDRIs, Khronos
+        sample glTF models). Returns downloadable URLs suitable for
+        import_gltf / set_environment.
+      tool: ./tools/search-asset-library.mjs
+      parameters:
+        type: object
+        properties:
+          query: { type: string }
+          limit: { type: integer, description: "Default 5." }
+          kind:  { type: string, enum: [model, texture, hdri] }
+        required: [query]
+
+    - name: decimate_mesh
+      description: >
+        Record a decimation intent (target triangle count) on an asset.
+        v0.3 records intent only; actual polygon reduction is Phase 3.
+      tool: ./tools/decimate-mesh.mjs
+      parameters:
+        type: object
+        properties:
+          slug:        { type: string }
+          asset_id:    { type: string }
+          target_tris: { type: integer }
+          cwd:         { type: string }
+        required: [slug, asset_id, target_tris]
+
+    - name: list_assets
+      description: List assets registered in scene.assets for a scene.
+      tool: ./tools/list-assets.mjs
+      parameters:
+        type: object
+        properties:
+          slug: { type: string }
+          kind: { type: string, enum: [mesh, texture, gltf, hdri] }
+          cwd:  { type: string }
+        required: [slug]
+
+    # ── Behavior Agent ──────────────────────────────────────────────
+    - name: add_physics_body
+      description: >
+        Attach a cannon-es rigid body to a node. Emits CANNON.World +
+        stepping in the compiled HTML. Use mass 0 for static (floor/walls).
+      tool: ./tools/add-physics-body.mjs
+      parameters:
+        type: object
+        properties:
+          slug:        { type: string }
+          target:      { type: string }
+          shape:       { type: string, enum: [box, sphere, plane] }
+          mass:        { type: number }
+          halfExtents: { type: array, items: { type: number } }
+          radius:      { type: number }
+          position:    { type: array, items: { type: number } }
+          restitution: { type: number }
+          friction:    { type: number }
+          id:          { type: string }
+          cwd:         { type: string }
+        required: [slug, target, shape]
+
+    - name: add_script
+      description: >
+        Attach a sandboxed JS snippet to a node's tick / click / hover
+        event. Variables in scope: target, scene, dt (tick), hit (click/hover), THREE.
+      tool: ./tools/add-script.mjs
+      parameters:
+        type: object
+        properties:
+          slug:   { type: string }
+          target: { type: string }
+          event:  { type: string, enum: [tick, click, hover] }
+          code:   { type: string }
+          id:     { type: string }
+          cwd:    { type: string }
+        required: [slug, target, event, code]
+
+    - name: wire_event
+      description: >
+        High-level shortcut for common interactions (toggle_visible,
+        hide, show, swap_material, translate, rotate, log). Generates a
+        script under the hood; prefer this over hand-writing add_script.
+      tool: ./tools/wire-event.mjs
+      parameters:
+        type: object
+        properties:
+          slug:   { type: string }
+          source: { type: string }
+          event:  { type: string, enum: [click, hover] }
+          action: { type: string, enum: [toggle_visible, hide, show, swap_material, translate, rotate, log] }
+          target: { type: string, description: "Defaults to source." }
+          value:  { description: "Action-specific payload." }
+          cwd:    { type: string }
+        required: [slug, source, event, action]
+
+    # ── Animation Agent ─────────────────────────────────────────────
+    - name: add_keyframe
+      description: >
+        Add or extend a keyframe animation clip on a node. Emits
+        AnimationMixer + KeyframeTrack in the compiled HTML.
+      tool: ./tools/add-keyframe.mjs
+      parameters:
+        type: object
+        properties:
+          slug:          { type: string }
+          target:        { type: string }
+          clip_id:       { type: string }
+          duration:      { type: number }
+          loop:          { type: boolean }
+          property:      { type: string, description: "'.position', '.rotation', '.scale', '.quaternion', '.material.opacity'" }
+          times:         { type: array, items: { type: number } }
+          values:        { type: array, items: { type: number } }
+          interpolation: { type: string }
+          cwd:           { type: string }
+        required: [slug, target, property, times, values]
+
+    - name: add_procedural_motion
+      description: >
+        Attach a common tick-driven procedural motion (spin, orbit,
+        oscillate, bob). Cheaper than keyframes for unbounded loops.
+      tool: ./tools/add-procedural-motion.mjs
+      parameters:
+        type: object
+        properties:
+          slug:      { type: string }
+          target:    { type: string }
+          kind:      { type: string, enum: [spin, orbit, oscillate, bob] }
+          axis:      { type: string, enum: [x, y, z] }
+          speed:     { type: number }
+          radius:    { type: number, description: "orbit only" }
+          amplitude: { type: number, description: "oscillate/bob only" }
+          cwd:       { type: string }
+        required: [slug, target, kind]
+
+    # ── Critic Agent ────────────────────────────────────────────────
+    - name: render_screenshot
+      description: >
+        Capture PNGs of the scene from N camera angles using puppeteer
+        (headless Chromium). Falls back to a shot-plan when puppeteer is
+        not installed so the critic can still run in DSL-only mode.
+      tool: ./tools/render-screenshot.mjs
+      parameters:
+        type: object
+        properties:
+          slug:    { type: string }
+          angles:  { type: array, items: { type: object }, description: "[{azimuth, elevation, distance?}] in degrees + meters" }
+          width:   { type: integer }
+          height:  { type: integer }
+          wait_ms: { type: integer, description: "Post-load render warmup (default 800)." }
+          cwd:     { type: string }
+        required: [slug]
+
+    - name: evaluate_scene
+      description: >
+        Critique a scene via the configured VLM provider (env
+        THREEJS_VLM_PROVIDER=anthropic|local). Optionally captures
+        screenshots first when none are supplied. Local heuristic
+        fallback still catches "no lights", "empty scene", "missing
+        materials" without any API call.
+      tool: ./tools/evaluate-scene.mjs
+      parameters:
+        type: object
+        properties:
+          slug:        { type: string }
+          criteria:    { type: string, description: "What 'good' means for this scene." }
+          screenshots: { type: array, items: { type: string }, description: "Paths to PNGs." }
+          provider:    { type: string }
+          cwd:         { type: string }
+        required: [slug]
+
     # ── One-shot fallback (raw HTML) ────────────────────────────────
     - name: write_threejs_scene
       description: >
@@ -490,3 +726,6 @@ config:
     - type: panel
       name: Three.js Studio
       source: ./workspace/studio.html
+    - type: panel
+      name: Viewport
+      source: ./workspace/viewport.html
