@@ -54,6 +54,15 @@
       "description": "Standalone Manim animation studio for text-to-video explainers with render state, background jobs, review, and a live gallery",
       "author": "BahulamAI",
       "tags": ["animation", "video", "manim", "async", "education", "explainer"]
+    },
+    {
+      "name": "threejs-studio",
+      "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
+      "ref": "main",
+      "subdir": "plugins/threejs-studio",
+      "description": "Standalone Three.js interactive 3D studio — text-to-scene for product demos, data visualizations, architectural walkthroughs, physics simulations, generative art, and educational animations. Instant HTML output, no render pipeline.",
+      "author": "BahulamAI",
+      "tags": ["threejs", "3d", "visualization", "animation", "interactive", "webgl", "education", "product"]
     }
   ]
 }

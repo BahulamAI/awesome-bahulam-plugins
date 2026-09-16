@@ -1,0 +1,731 @@
+apiVersion: bahulam.plugin/1
+kind: Plugin
+metadata:
+  name: threejs-studio
+  version: 0.3.0
+  description: >
+    Compositional Three.js content creation studio. Scenes are stored as a
+    JSON DSL and compiled to a self-contained HTML document on every
+    mutation. Domain specialists (layout / material / lighting / camera /
+    asset / behavior / animation) each own a slice of the DSL and are
+    orchestrated by a Scene Director. A Critic Agent closes the loop by
+    capturing screenshots and evaluating them via a VLM. Provider adapters
+    (Meshy, Fal, Anthropic) plug in via env vars; local stubs keep every
+    tool chain green with zero credentials. Supports product demos,
+    configurators, data visualizations, architectural walkthroughs, physics
+    simulations, generative art, educational animations, interactive
+    experiences, and MP4 video export via headless Chromium.
+  author: BahulamAI
+  repository: https://github.com/BahulamAI/awesome-bahulam-plugins
+
+config:
+  requirements:
+    system: []
+    env: []
+    filesystem: []
+
+  state:
+    tables:
+      - name: threejs_scenes
+        columns:
+          - { name: id, type: INTEGER, primary: true, autoincrement: true }
+          - { name: slug, type: TEXT, not_null: true }
+          - { name: title, type: TEXT, not_null: true }
+          - { name: script, type: TEXT }
+          - { name: html_path, type: TEXT, not_null: true }
+          - { name: dsl_path, type: TEXT, not_null: true, default: "''" }
+          - { name: width, type: INTEGER, default: '800' }
+          - { name: height, type: INTEGER, default: '600' }
+          - { name: status, type: TEXT, not_null: true, default: "'draft'" }
+          - { name: created_at, type: TEXT, not_null: true }
+          - { name: updated_at, type: TEXT, not_null: true }
+        indexes:
+          - { columns: [slug] }
+          - { columns: [status] }
+
+      - name: threejs_approvals
+        columns:
+          - { name: id, type: INTEGER, primary: true, autoincrement: true }
+          - { name: slug, type: TEXT, not_null: true }
+          - { name: reviewer, type: TEXT, not_null: true }
+          - { name: decision, type: TEXT, not_null: true }
+          - { name: notes, type: TEXT, not_null: true, default: "''" }
+          - { name: approved_script_path, type: TEXT, not_null: true, default: "''" }
+          - { name: created_at, type: TEXT, not_null: true }
+        indexes:
+          - { columns: [slug] }
+          - { columns: [decision] }
+
+      - name: threejs_jobs
+        columns:
+          - { name: id, type: INTEGER, primary: true, autoincrement: true }
+          - { name: slug, type: TEXT, not_null: true }
+          - { name: status, type: TEXT, not_null: true }
+          - { name: html_path, type: TEXT, not_null: true, default: "''" }
+          - { name: notes, type: TEXT, not_null: true, default: "''" }
+          - { name: created_at, type: TEXT, not_null: true }
+          - { name: completed_at, type: TEXT }
+        indexes:
+          - { columns: [slug] }
+          - { columns: [status] }
+
+    context_always:
+      - { stream: scenes, limit: 5 }
+
+    context_tools:
+      - name: list_threejs_scenes
+        table: threejs_scenes
+        description: List saved Three.js scenes with status, path, and dimensions.
+        parameters:
+          type: object
+          properties:
+            limit: { type: integer, description: "Max rows to return." }
+
+      - name: list_threejs_jobs
+        table: threejs_jobs
+        description: List render job outcomes with paths, status, and reviewer notes.
+        parameters:
+          type: object
+          properties:
+            slug: { type: string, description: "Optional scene slug." }
+            limit: { type: integer, description: "Max rows to return." }
+        where: "slug = ?"
+        params: [slug]
+
+      - name: list_threejs_approvals
+        table: threejs_approvals
+        description: List user/director approval decisions before compositional work starts.
+        parameters:
+          type: object
+          properties:
+            slug: { type: string, description: "Optional scene slug." }
+            limit: { type: integer, description: "Max rows to return." }
+        where: "slug = ?"
+        params: [slug]
+
+  tools:
+    # ── Scene lifecycle ─────────────────────────────────────────────
+    - name: create_scene
+      description: >
+        Initialize a new scene folder with scene.json (default lights,
+        camera, grid) and a compiled index.html. Also records a row in
+        threejs_scenes state. Output goes to <cwd>/<slug>/.
+      tool: ./tools/create-scene.mjs
+      parameters:
+        type: object
+        properties:
+          name:   { type: string, description: "Scene slug (lowercase, hyphens)." }
+          title:  { type: string, description: "Human-readable title." }
+          width:  { type: integer, description: "Canvas width (default 800)." }
+          height: { type: integer, description: "Canvas height (default 600)." }
+          cwd:    { type: string, description: "Base directory (default process.cwd())." }
+        required: [name]
+
+    - name: get_scene
+      description: >
+        Return a compact summary of the scene DSL — node ids/types,
+        material summary, camera, background. Pass full:true for the
+        raw scene.json. Always call this at the start of a specialist turn.
+      tool: ./tools/get-scene.mjs
+      parameters:
+        type: object
+        properties:
+          slug: { type: string, description: "Scene slug." }
+          cwd:  { type: string, description: "Base directory." }
+          full: { type: boolean, description: "If true return the entire scene object." }
+        required: [slug]
+
+    - name: snapshot_scene
+      description: >
+        Snapshot the current scene.json into snapshots/ with a timestamped
+        filename. Cheap and reversible; use before large destructive edits.
+      tool: ./tools/snapshot-scene.mjs
+      parameters:
+        type: object
+        properties:
+          slug:  { type: string, description: "Scene slug." }
+          label: { type: string, description: "Optional label appended to filename." }
+          cwd:   { type: string, description: "Base directory." }
+        required: [slug]
+
+    # ── Layout Agent ────────────────────────────────────────────────
+    - name: create_node
+      description: >
+        Add a node (mesh, group, light, helper, instanced, points, line,
+        gltf, sprite) to the scene. Returns { id, type, html_path }.
+      tool: ./tools/create-node.mjs
+      parameters:
+        type: object
+        properties:
+          slug:          { type: string }
+          type:          { type: string, enum: [mesh, group, light, helper, instanced, points, line, gltf, sprite, text] }
+          id:            { type: string, description: "Stable id; auto-generated if omitted." }
+          name:          { type: string }
+          parent:        { type: string, description: "Parent node id." }
+          position:      { type: array, items: { type: number } }
+          rotation:      { type: array, items: { type: number } }
+          scale:         { type: array, items: { type: number } }
+          castShadow:    { type: boolean }
+          receiveShadow: { type: boolean }
+          visible:       { type: boolean }
+          geometry:      { type: object, description: "Geometry spec { type, params } — required for mesh/instanced/points/line." }
+          materialId:    { type: string, description: "Material id from scene.materials." }
+          light:         { type: object, description: "Light spec { type, color, intensity, ... } — required for light nodes." }
+          helper:        { type: object, description: "Helper spec { type, ... } — required for helper nodes." }
+          asset:         { type: string, description: "Relative path to .glb — required for gltf nodes." }
+          count:         { type: integer }
+          instances:     { type: array, items: { type: object } }
+          cwd:           { type: string }
+        required: [slug, type]
+
+    - name: set_transform
+      description: Patch position/rotation/scale on a node.
+      tool: ./tools/set-transform.mjs
+      parameters:
+        type: object
+        properties:
+          slug:     { type: string }
+          id:       { type: string }
+          position: { type: array, items: { type: number } }
+          rotation: { type: array, items: { type: number } }
+          scale:    { type: array, items: { type: number } }
+          cwd:      { type: string }
+        required: [slug, id]
+
+    - name: reparent_node
+      description: Move a node under a different parent (or the scene root).
+      tool: ./tools/reparent-node.mjs
+      parameters:
+        type: object
+        properties:
+          slug:   { type: string }
+          id:     { type: string }
+          parent: { type: string, description: "Empty or null to detach to root." }
+          cwd:    { type: string }
+        required: [slug, id]
+
+    - name: delete_node
+      description: Remove a node (and by default its descendants).
+      tool: ./tools/delete-node.mjs
+      parameters:
+        type: object
+        properties:
+          slug:      { type: string }
+          id:        { type: string }
+          recursive: { type: boolean, description: "Default true." }
+          cwd:       { type: string }
+        required: [slug, id]
+
+    - name: align_nodes
+      description: Align or distribute a set of nodes along an axis.
+      tool: ./tools/align-nodes.mjs
+      parameters:
+        type: object
+        properties:
+          slug: { type: string }
+          ids:  { type: array, items: { type: string } }
+          axis: { type: string, enum: [x, y, z] }
+          mode: { type: string, enum: [min, center, max, distribute] }
+          cwd:  { type: string }
+        required: [slug, ids, axis, mode]
+
+    - name: measure_bounds
+      description: >
+        Approximate axis-aligned bounds for one or more nodes (from
+        primitive geometry params + transforms).
+      tool: ./tools/measure-bounds.mjs
+      parameters:
+        type: object
+        properties:
+          slug: { type: string }
+          ids:  { type: array, items: { type: string }, description: "Defaults to all nodes." }
+          cwd:  { type: string }
+        required: [slug]
+
+    # ── Material Agent ──────────────────────────────────────────────
+    - name: create_material
+      description: >
+        Define a material in scene.materials. type defaults to "standard"
+        (PBR). Extra fields include roughness, metalness, emissive, opacity,
+        transparent, clearcoat, transmission, and texture map paths.
+      tool: ./tools/create-material.mjs
+      parameters:
+        type: object
+        properties:
+          slug:              { type: string }
+          id:                { type: string, description: "Material id — referenced by node.materialId." }
+          type:              { type: string, enum: [standard, physical, basic, lambert, phong, toon, normal, points, line] }
+          color:             { type: string }
+          roughness:         { type: number }
+          metalness:         { type: number }
+          emissive:          { type: string }
+          emissiveIntensity: { type: number }
+          opacity:           { type: number }
+          transparent:       { type: boolean }
+          side:              { type: integer }
+          wireframe:         { type: boolean }
+          envMapIntensity:   { type: number }
+          clearcoat:         { type: number }
+          transmission:      { type: number }
+          ior:               { type: number }
+          thickness:         { type: number }
+          map:               { type: string, description: "Diffuse/albedo texture path." }
+          normalMap:         { type: string }
+          roughnessMap:      { type: string }
+          metalnessMap:      { type: string }
+          emissiveMap:       { type: string }
+          aoMap:             { type: string }
+          alphaMap:          { type: string }
+          cwd:               { type: string }
+        required: [slug, id]
+
+    - name: set_material_property
+      description: Patch fields on an existing material.
+      tool: ./tools/set-material-property.mjs
+      parameters:
+        type: object
+        properties:
+          slug:  { type: string }
+          id:    { type: string }
+          patch: { type: object, description: "Fields to merge (null to delete)." }
+          cwd:   { type: string }
+        required: [slug, id, patch]
+
+    - name: assign_material
+      description: Bind a material to one or more nodes (materialId).
+      tool: ./tools/assign-material.mjs
+      parameters:
+        type: object
+        properties:
+          slug:        { type: string }
+          node_ids:    { type: array, items: { type: string } }
+          material_id: { type: string }
+          cwd:         { type: string }
+        required: [slug, node_ids, material_id]
+
+    # ── Lighting Agent ──────────────────────────────────────────────
+    - name: add_light
+      description: >
+        Add or replace a light node. Supported types: ambient, directional,
+        point, spot, hemisphere, rectarea.
+      tool: ./tools/add-light.mjs
+      parameters:
+        type: object
+        properties:
+          slug:          { type: string }
+          id:            { type: string, description: "Auto-generated if omitted." }
+          type:          { type: string, enum: [ambient, directional, point, spot, hemisphere, rectarea] }
+          color:         { type: string }
+          intensity:     { type: number }
+          position:      { type: array, items: { type: number } }
+          target:        { type: array, items: { type: number } }
+          distance:      { type: number }
+          decay:         { type: number }
+          angle:         { type: number }
+          penumbra:      { type: number }
+          groundColor:   { type: string, description: "hemisphere only" }
+          width:         { type: number, description: "rectarea only" }
+          height:        { type: number, description: "rectarea only" }
+          castShadow:    { type: boolean }
+          shadowMapSize: { type: integer }
+          cwd:           { type: string }
+        required: [slug, type]
+
+    - name: set_environment
+      description: >
+        Set scene background — either an HDRI path (for IBL lighting) or
+        a solid color.
+      tool: ./tools/set-environment.mjs
+      parameters:
+        type: object
+        properties:
+          slug:      { type: string }
+          hdri:      { type: string, description: "Path to .hdr (relative or URL)." }
+          color:     { type: string, description: "Solid background color." }
+          intensity: { type: number, description: "Env map intensity multiplier." }
+          cwd:       { type: string }
+        required: [slug]
+
+    - name: set_exposure
+      description: Set tone mapping mode and exposure.
+      tool: ./tools/set-exposure.mjs
+      parameters:
+        type: object
+        properties:
+          slug:     { type: string }
+          exposure: { type: number }
+          mapping:  { type: string, enum: [None, Linear, Reinhard, Cineon, ACESFilmic] }
+          cwd:      { type: string }
+        required: [slug]
+
+    # ── Camera Agent ────────────────────────────────────────────────
+    - name: set_camera
+      description: Configure camera type, framing, controls.
+      tool: ./tools/set-camera.mjs
+      parameters:
+        type: object
+        properties:
+          slug:     { type: string }
+          type:     { type: string, enum: [perspective, orthographic] }
+          fov:      { type: number }
+          near:     { type: number }
+          far:      { type: number }
+          position: { type: array, items: { type: number } }
+          target:   { type: array, items: { type: number } }
+          controls: { type: string, enum: [orbit, first-person, none] }
+          width:    { type: number, description: "orthographic half-width" }
+          height:   { type: number, description: "orthographic half-height" }
+          cwd:      { type: string }
+        required: [slug]
+
+    - name: frame_scene
+      description: >
+        Auto-position the camera to frame all (or specified) nodes with
+        the given padding, azimuth, and elevation.
+      tool: ./tools/frame-scene.mjs
+      parameters:
+        type: object
+        properties:
+          slug:      { type: string }
+          ids:       { type: array, items: { type: string } }
+          padding:   { type: number, description: "Default 1.4." }
+          azimuth:   { type: number, description: "Degrees around Y (default 30)." }
+          elevation: { type: number, description: "Degrees (default 20)." }
+          cwd:       { type: string }
+        required: [slug]
+
+    # ── Asset Agent ─────────────────────────────────────────────────
+    - name: generate_mesh
+      description: >
+        Text→3D via the configured mesh provider (env
+        THREEJS_MESH_PROVIDER=meshy|local). Local fallback writes a
+        placeholder primitive .gltf so the tool chain always completes.
+        By default also registers a `gltf` node in the scene.
+      tool: ./tools/generate-mesh.mjs
+      parameters:
+        type: object
+        properties:
+          slug:          { type: string }
+          prompt:        { type: string }
+          id:            { type: string, description: "Stable asset id." }
+          provider:      { type: string, description: "Override THREEJS_MESH_PROVIDER for this call." }
+          seed:          { type: integer }
+          register_node: { type: boolean, description: "Default true." }
+          node_id:       { type: string }
+          parent:        { type: string }
+          position:      { type: array, items: { type: number } }
+          cwd:           { type: string }
+        required: [slug, prompt]
+
+    - name: generate_texture
+      description: >
+        Text→image via the configured texture provider (env
+        THREEJS_TEXTURE_PROVIDER=fal|local). Local fallback writes a
+        solid-color PNG matched to keyword palette. Optionally applies
+        the texture as the `map` slot of an existing material.
+      tool: ./tools/generate-texture.mjs
+      parameters:
+        type: object
+        properties:
+          slug:     { type: string }
+          prompt:   { type: string }
+          id:       { type: string }
+          size:     { type: integer }
+          provider: { type: string }
+          apply_to: { type: string, description: "Material id to receive the texture as `map`." }
+          cwd:      { type: string }
+        required: [slug, prompt]
+
+    - name: import_gltf
+      description: >
+        Register an existing .glb / .gltf asset (URL or local path) into
+        the scene folder and, by default, add a node that references it.
+      tool: ./tools/import-gltf.mjs
+      parameters:
+        type: object
+        properties:
+          slug:          { type: string }
+          src:           { type: string, description: "URL or absolute/relative file path." }
+          id:            { type: string, description: "Asset id (default: filename stem)." }
+          register_node: { type: boolean }
+          node_id:       { type: string }
+          parent:        { type: string }
+          position:      { type: array, items: { type: number } }
+          rotation:      { type: array, items: { type: number } }
+          scale:         { type: array, items: { type: number } }
+          cwd:           { type: string }
+        required: [slug, src]
+
+    - name: search_asset_library
+      description: >
+        Search a curated catalog of free assets (Poly Haven HDRIs, Khronos
+        sample glTF models). Returns downloadable URLs suitable for
+        import_gltf / set_environment.
+      tool: ./tools/search-asset-library.mjs
+      parameters:
+        type: object
+        properties:
+          query: { type: string }
+          limit: { type: integer, description: "Default 5." }
+          kind:  { type: string, enum: [model, texture, hdri] }
+        required: [query]
+
+    - name: decimate_mesh
+      description: >
+        Record a decimation intent (target triangle count) on an asset.
+        v0.3 records intent only; actual polygon reduction is Phase 3.
+      tool: ./tools/decimate-mesh.mjs
+      parameters:
+        type: object
+        properties:
+          slug:        { type: string }
+          asset_id:    { type: string }
+          target_tris: { type: integer }
+          cwd:         { type: string }
+        required: [slug, asset_id, target_tris]
+
+    - name: list_assets
+      description: List assets registered in scene.assets for a scene.
+      tool: ./tools/list-assets.mjs
+      parameters:
+        type: object
+        properties:
+          slug: { type: string }
+          kind: { type: string, enum: [mesh, texture, gltf, hdri] }
+          cwd:  { type: string }
+        required: [slug]
+
+    # ── Behavior Agent ──────────────────────────────────────────────
+    - name: add_physics_body
+      description: >
+        Attach a cannon-es rigid body to a node. Emits CANNON.World +
+        stepping in the compiled HTML. Use mass 0 for static (floor/walls).
+      tool: ./tools/add-physics-body.mjs
+      parameters:
+        type: object
+        properties:
+          slug:        { type: string }
+          target:      { type: string }
+          shape:       { type: string, enum: [box, sphere, plane] }
+          mass:        { type: number }
+          halfExtents: { type: array, items: { type: number } }
+          radius:      { type: number }
+          position:    { type: array, items: { type: number } }
+          restitution: { type: number }
+          friction:    { type: number }
+          id:          { type: string }
+          cwd:         { type: string }
+        required: [slug, target, shape]
+
+    - name: add_script
+      description: >
+        Attach a sandboxed JS snippet to a node's tick / click / hover
+        event. Variables in scope: target, scene, dt (tick), hit (click/hover), THREE.
+      tool: ./tools/add-script.mjs
+      parameters:
+        type: object
+        properties:
+          slug:   { type: string }
+          target: { type: string }
+          event:  { type: string, enum: [tick, click, hover] }
+          code:   { type: string }
+          id:     { type: string }
+          cwd:    { type: string }
+        required: [slug, target, event, code]
+
+    - name: wire_event
+      description: >
+        High-level shortcut for common interactions (toggle_visible,
+        hide, show, swap_material, translate, rotate, log). Generates a
+        script under the hood; prefer this over hand-writing add_script.
+      tool: ./tools/wire-event.mjs
+      parameters:
+        type: object
+        properties:
+          slug:   { type: string }
+          source: { type: string }
+          event:  { type: string, enum: [click, hover] }
+          action: { type: string, enum: [toggle_visible, hide, show, swap_material, translate, rotate, log] }
+          target: { type: string, description: "Defaults to source." }
+          value:  { description: "Action-specific payload." }
+          cwd:    { type: string }
+        required: [slug, source, event, action]
+
+    # ── Animation Agent ─────────────────────────────────────────────
+    - name: add_keyframe
+      description: >
+        Add or extend a keyframe animation clip on a node. Emits
+        AnimationMixer + KeyframeTrack in the compiled HTML.
+      tool: ./tools/add-keyframe.mjs
+      parameters:
+        type: object
+        properties:
+          slug:          { type: string }
+          target:        { type: string }
+          clip_id:       { type: string }
+          duration:      { type: number }
+          loop:          { type: boolean }
+          property:      { type: string, description: "'.position', '.rotation', '.scale', '.quaternion', '.material.opacity'" }
+          times:         { type: array, items: { type: number } }
+          values:        { type: array, items: { type: number } }
+          interpolation: { type: string }
+          cwd:           { type: string }
+        required: [slug, target, property, times, values]
+
+    - name: add_procedural_motion
+      description: >
+        Attach a common tick-driven procedural motion (spin, orbit,
+        oscillate, bob). Cheaper than keyframes for unbounded loops.
+      tool: ./tools/add-procedural-motion.mjs
+      parameters:
+        type: object
+        properties:
+          slug:      { type: string }
+          target:    { type: string }
+          kind:      { type: string, enum: [spin, orbit, oscillate, bob] }
+          axis:      { type: string, enum: [x, y, z] }
+          speed:     { type: number }
+          radius:    { type: number, description: "orbit only" }
+          amplitude: { type: number, description: "oscillate/bob only" }
+          cwd:       { type: string }
+        required: [slug, target, kind]
+
+    # ── Critic Agent ────────────────────────────────────────────────
+    - name: render_screenshot
+      description: >
+        Capture PNGs of the scene from N camera angles using puppeteer
+        (headless Chromium). Falls back to a shot-plan when puppeteer is
+        not installed so the critic can still run in DSL-only mode.
+      tool: ./tools/render-screenshot.mjs
+      parameters:
+        type: object
+        properties:
+          slug:    { type: string }
+          angles:  { type: array, items: { type: object }, description: "[{azimuth, elevation, distance?}] in degrees + meters" }
+          width:   { type: integer }
+          height:  { type: integer }
+          wait_ms: { type: integer, description: "Post-load render warmup (default 800)." }
+          cwd:     { type: string }
+        required: [slug]
+
+    - name: evaluate_scene
+      description: >
+        Critique a scene via the configured VLM provider (env
+        THREEJS_VLM_PROVIDER=anthropic|local). Optionally captures
+        screenshots first when none are supplied. Local heuristic
+        fallback still catches "no lights", "empty scene", "missing
+        materials" without any API call.
+      tool: ./tools/evaluate-scene.mjs
+      parameters:
+        type: object
+        properties:
+          slug:        { type: string }
+          criteria:    { type: string, description: "What 'good' means for this scene." }
+          screenshots: { type: array, items: { type: string }, description: "Paths to PNGs." }
+          provider:    { type: string }
+          cwd:         { type: string }
+        required: [slug]
+
+    # ── One-shot fallback (raw HTML) ────────────────────────────────
+    - name: write_threejs_scene
+      description: >
+        Fallback — write a raw self-contained Three.js HTML scene from a
+        JS snippet. Bypasses the DSL. Use only for scenes where custom
+        loops, shaders, or physics make the DSL an obstacle. The compiled
+        HTML is NOT regenerated on subsequent DSL mutations.
+      tool: ./tools/write-threejs-scene.mjs
+      parameters:
+        type: object
+        properties:
+          name:   { type: string }
+          title:  { type: string }
+          script: { type: string, description: "The Three.js module code injected into the boilerplate." }
+          html:   { type: string, description: "Optional full document override." }
+          width:  { type: integer }
+          height: { type: integer }
+          cwd:    { type: string }
+        required: [name]
+
+    # ── Review + records ────────────────────────────────────────────
+    - name: register_render
+      description: >
+        Record a completed (or failed) scene on the plugin's shared state.
+        Reviewer calls this after inspecting the finished HTML.
+      tool: ./tools/register-render.mjs
+      parameters:
+        type: object
+        properties:
+          name:      { type: string }
+          status:    { type: string, enum: [completed, failed, fixed_and_rerendered] }
+          html_path: { type: string }
+          notes:     { type: string }
+        required: [name, status]
+
+    - name: list_renders
+      description: List saved Three.js scenes and outcomes from durable state.
+      tool: ./tools/list-renders.mjs
+      parameters:
+        type: object
+        properties:
+          limit: { type: integer }
+        required: []
+
+    - name: render_approval_record
+      description: >
+        Persist the user/director approval gate before compositional work
+        starts. Call this after the user explicitly approves, rejects, or
+        requests changes to the plan.
+      tool: ./tools/render-approval-record.mjs
+      parameters:
+        type: object
+        properties:
+          slug:                 { type: string }
+          reviewer:             { type: string }
+          decision:             { type: string, enum: [approved, rejected, changes_requested] }
+          notes:                { type: string }
+          approved_script_path: { type: string }
+        required: [slug, reviewer, decision]
+
+    - name: render_report
+      description: >
+        Build an evidence report for a scene or workspace: saved source,
+        approvals, render outcomes, paths, readiness, and failures.
+      tool: ./tools/render-report.mjs
+      parameters:
+        type: object
+        properties:
+          slug: { type: string }
+        required: []
+
+    # ── Video export ────────────────────────────────────────────────
+    - name: render_threejs_video
+      description: >
+        Export a Three.js HTML scene to an MP4 video via headless Chromium
+        (puppeteer) + ffmpeg. Supports auto-orbit / orbit / static presets
+        and l/m/h quality tiers. Returns a render_command to launch as a
+        background shell job.
+      tool: ./tools/render-threejs-video.mjs
+      parameters:
+        type: object
+        properties:
+          slug:      { type: string }
+          html_path: { type: string, description: "Auto-resolved from slug + cwd if omitted." }
+          duration:  { type: integer }
+          fps:       { type: integer }
+          preset:    { type: string, enum: [auto-orbit, orbit, static] }
+          quality:   { type: string, enum: [l, m, h] }
+          width:     { type: integer }
+          height:    { type: integer }
+          cwd:       { type: string }
+        required: [slug]
+
+  workspace: ./config/workspace.yaml
+  agents_from: ./config/agents/
+
+  views:
+    - type: panel
+      name: Three.js Studio
+      source: ./workspace/studio.html
+    - type: panel
+      name: Viewport
+      source: ./workspace/viewport.html
