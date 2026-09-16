@@ -20,15 +20,6 @@
       "tags": ["marketing", "campaigns", "ads", "content", "analytics", "state", "orchestration"]
     },
     {
-      "name": "content-creation",
-      "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
-      "ref": "main",
-      "subdir": "plugins/content-creation",
-      "description": "Multi-agent content runtime for copy, image, video, Three.js, and Manim assets with briefs, artifact tracking, background renders, review, and a live gallery",
-      "author": "BahulamAI",
-      "tags": ["showcase", "content", "image", "video", "threejs", "manim", "async", "orchestration"]
-    },
-    {
       "name": "document-writer",
       "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
       "ref": "main",
