@@ -1,0 +1,237 @@
+apiVersion: bahulam.plugin/1
+kind: Plugin
+metadata:
+  name: threejs-studio
+  version: 0.1.0
+  description: >
+    Standalone Three.js interactive 3D studio — describe a concept; the
+    developer agent writes a complete self-contained HTML scene powered by
+    Three.js (CDN). No Python, no ffmpeg, no CLI render — the output is an
+    HTML file you open in any browser instantly. Supports product demos,
+    data visualizations, architectural walkthroughs, physics simulations,
+    generative art, and educational animations.
+  author: BahulamAI
+  repository: https://github.com/BahulamAI/awesome-bahulam-plugins
+
+config:
+  requirements:
+    system: []
+    env: []
+    filesystem: []
+
+  state:
+    tables:
+      - name: threejs_scenes
+        columns:
+          - { name: id, type: INTEGER, primary: true, autoincrement: true }
+          - { name: slug, type: TEXT, not_null: true }
+          - { name: title, type: TEXT, not_null: true }
+          - { name: script, type: TEXT }
+          - { name: html_path, type: TEXT, not_null: true }
+          - { name: width, type: INTEGER, default: '800' }
+          - { name: height, type: INTEGER, default: '600' }
+          - { name: status, type: TEXT, not_null: true, default: "'draft'" }
+          - { name: created_at, type: TEXT, not_null: true }
+          - { name: updated_at, type: TEXT, not_null: true }
+        indexes:
+          - { columns: [slug] }
+          - { columns: [status] }
+
+      - name: threejs_approvals
+        columns:
+          - { name: id, type: INTEGER, primary: true, autoincrement: true }
+          - { name: slug, type: TEXT, not_null: true }
+          - { name: reviewer, type: TEXT, not_null: true }
+          - { name: decision, type: TEXT, not_null: true }
+          - { name: notes, type: TEXT, not_null: true, default: "''" }
+          - { name: approved_script_path, type: TEXT, not_null: true, default: "''" }
+          - { name: created_at, type: TEXT, not_null: true }
+        indexes:
+          - { columns: [slug] }
+          - { columns: [decision] }
+
+      - name: threejs_jobs
+        columns:
+          - { name: id, type: INTEGER, primary: true, autoincrement: true }
+          - { name: slug, type: TEXT, not_null: true }
+          - { name: status, type: TEXT, not_null: true }
+          - { name: html_path, type: TEXT, not_null: true, default: "''" }
+          - { name: notes, type: TEXT, not_null: true, default: "''" }
+          - { name: created_at, type: TEXT, not_null: true }
+          - { name: completed_at, type: TEXT }
+        indexes:
+          - { columns: [slug] }
+          - { columns: [status] }
+
+    context_always:
+      - { stream: scenes, limit: 5 }
+
+    context_tools:
+      - name: list_threejs_scenes
+        table: threejs_scenes
+        description: List saved Three.js scenes with status, path, and dimensions.
+        parameters:
+          type: object
+          properties:
+            limit: { type: integer, description: "Max rows to return." }
+
+      - name: list_threejs_jobs
+        table: threejs_jobs
+        description: List render job outcomes with paths, status, and reviewer notes.
+        parameters:
+          type: object
+          properties:
+            slug: { type: string, description: "Optional scene slug." }
+            limit: { type: integer, description: "Max rows to return." }
+        where: "slug = ?"
+        params: [slug]
+
+      - name: list_threejs_approvals
+        table: threejs_approvals
+        description: List user/director approval decisions before developer codes.
+        parameters:
+          type: object
+          properties:
+            slug: { type: string, description: "Optional scene slug." }
+            limit: { type: integer, description: "Max rows to return." }
+        where: "slug = ?"
+        params: [slug]
+
+  tools:
+    - name: write_threejs_scene
+      description: >
+        Write a complete self-contained Three.js HTML scene to disk.
+        Accepts the scene JS code (as `script`) and wraps it in a
+        full HTML document with importmap for Three.js CDN loading,
+        default lighting, OrbitControls, resize handler, and animation
+        loop. Optionally accepts `html` for a full document override.
+        The output is a .html file the user can open in any browser.
+        Output goes to <cwd>/<slug>/index.html (defaults to process.cwd()).
+      tool: ./tools/write-threejs-scene.mjs
+      parameters:
+        type: object
+        properties:
+          name:
+            type: string
+            description: "Slug for the scene (e.g. product-demo-car). Used for folder and file names."
+          title:
+            type: string
+            description: "Human-readable title displayed at the bottom-left of the canvas."
+          script:
+            type: string
+            description: "The Three.js ES module code. Injected into the boilerplate after default scene setup (scene, camera, renderer, lights, controls, resize handler, animation loop). Must create/add objects to the `scene` variable."
+          html:
+            type: string
+            description: "Optional full HTML document override. If provided, `script` is ignored."
+          width:
+            type: integer
+            description: "Canvas width in pixels (default 800)."
+          height:
+            type: integer
+            description: "Canvas height in pixels (default 600)."
+          cwd:
+            type: string
+            description: "Base directory for output files (defaults to process.cwd()). Writes <cwd>/<slug>/index.html."
+        required: [name]
+
+    - name: register_render
+      description: >
+        Record a completed (or failed) scene on the plugin's shared state —
+        the workspace gallery lists scenes from here. The reviewer calls this
+        after inspecting the finished HTML.
+      tool: ./tools/register-render.mjs
+      parameters:
+        type: object
+        properties:
+          name:         { type: string, description: "Scene slug" }
+          status:       { type: string, enum: [completed, failed, fixed_and_rerendered] }
+          html_path:    { type: string, description: "Path to the .html file" }
+          notes:        { type: string, description: "Reviewer verdict — one or two lines" }
+        required: [name, status]
+
+    - name: list_renders
+      description: List saved Three.js scenes and outcomes from durable state, newest first.
+      tool: ./tools/list-renders.mjs
+      parameters:
+        type: object
+        properties:
+          limit: { type: integer, description: "Max rows (default 20)" }
+        required: []
+
+    - name: render_approval_record
+      description: >
+        Persist the user/director approval gate before the developer
+        writes code. Call this after the user explicitly approves,
+        rejects, or requests changes to the storyboard/script.
+      tool: ./tools/render-approval-record.mjs
+      parameters:
+        type: object
+        properties:
+          slug: { type: string, description: "Scene slug being approved." }
+          reviewer: { type: string, description: "Approver identity, usually user or director." }
+          decision: { type: string, enum: [approved, rejected, changes_requested] }
+          notes: { type: string, description: "Approval notes or requested changes." }
+          approved_script_path: { type: string, description: "Optional path to the approved scene description." }
+        required: [slug, reviewer, decision]
+
+    - name: render_report
+      description: >
+        Build an evidence report for a scene or workspace: saved source,
+        approvals, render outcomes, paths, readiness, and failures.
+      tool: ./tools/render-report.mjs
+      parameters:
+        type: object
+        properties:
+          slug: { type: string, description: "Optional scene slug." }
+        required: []
+
+    - name: render_threejs_video
+      description: >
+        Export a Three.js HTML scene to an MP4 video file. Uses headless
+        Chromium (puppeteer) to capture frames from the live 3D scene and
+        ffmpeg to encode. Supports presets: auto-orbit (camera rotates 360°
+        around the scene), orbit (user-controlled), or static. Quality
+        presets: l (854×480), m (1280×720), h (1920×1080). Must pass the
+        same `cwd` as write_threejs_scene so file paths stay aligned.
+      tool: ./tools/render-threejs-video.mjs
+      parameters:
+        type: object
+        properties:
+          slug:
+            type: string
+            description: "Scene slug to render (e.g. product-demo-car)."
+          html_path:
+            type: string
+            description: "Optional path to the .html file. Auto-resolved from slug + cwd if omitted."
+          duration:
+            type: integer
+            description: "Video duration in seconds (default 10, max 120)."
+          fps:
+            type: integer
+            description: "Frames per second (default 30, max 60)."
+          preset:
+            type: string
+            enum: [auto-orbit, orbit, static]
+            description: "Camera motion preset. auto-orbit rotates 360° around the scene."
+          quality:
+            type: string
+            enum: [l, m, h]
+            description: "Output quality preset. l=480p, m=720p, h=1080p."
+          width:
+            type: integer
+            description: "Explicit output width (overrides quality preset)."
+          height:
+            type: integer
+            description: "Explicit output height (overrides quality preset)."
+          cwd:
+            type: string
+            description: "Base directory (defaults to process.cwd()). Must match the `cwd` used in write_threejs_scene."
+        required: [slug]
+
+  workspace: ./config/workspace.yaml
+  agents_from: ./config/agents/
+
+  views:
+    - type: panel
+      name: Three.js Studio
+      source: ./workspace/studio.html
