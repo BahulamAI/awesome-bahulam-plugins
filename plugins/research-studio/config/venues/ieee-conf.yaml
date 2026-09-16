@@ -1,0 +1,22 @@
+key: ieee-conf
+name: IEEE Conference (IEEEtran)
+kind_defaults: [research_paper]
+document_class: IEEEtran
+class_options: [conference]
+packages: [graphicx, cite, hyperref, amsmath]
+bib_style: IEEEtran
+required_sections: [abstract, introduction, conclusion, references]
+recommended_sections:
+  - introduction
+  - related-work
+  - proposed-approach
+  - experiments
+  - results
+  - conclusion
+length:
+  target_pages: 6
+  hard_limit_pages: 8
+notes: |
+  Two-column format. Numbered citations. Do not use author-year style.
+  Section headings should be sentence case per IEEE convention.
+  Bibliography goes at the very end. Figures placed with [!t] or [!b].
