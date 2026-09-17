@@ -103,7 +103,7 @@ function recordCompile(state, slug, target, outputPath, status, notes) {
   if (state && typeof state.query === 'function') {
     try {
       state.query(
-        `INSERT INTO research_compilations (slug, target, output_path, status, notes, created_at)
+        `INSERT INTO compilations (slug, target, output_path, status, notes, created_at)
          VALUES (?, ?, ?, ?, ?, ?)`,
         [slug, target, outputPath, status, notes || '', nowIso()],
       );

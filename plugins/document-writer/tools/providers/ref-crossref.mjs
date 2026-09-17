@@ -44,7 +44,7 @@ function suggestId(entry) {
 export async function lookup({ query }) {
   if (process.env.RESEARCH_OFFLINE === '1') return localLookup({ query });
   const email = process.env.RESEARCH_CROSSREF_EMAIL;
-  const headers = { 'User-Agent': `research-studio/0.1 (mailto:${email || 'noreply@bahulam.ai'})` };
+  const headers = { 'User-Agent': `document-writer/0.2 (mailto:${email || 'noreply@bahulam.ai'})` };
   // DOI direct
   const doiMatch = String(query).match(/10\.\d{4,9}\/\S+/);
   if (doiMatch) {

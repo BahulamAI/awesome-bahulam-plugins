@@ -1,6 +1,6 @@
 # Agent Contracts — who owns what
 
-Research Studio uses domain-scoped specialists. Each specialist owns a
+Document Writer uses domain-scoped specialists. Each specialist owns a
 slice of the document DSL. The Director enforces boundaries by choosing
 whom to delegate to.
 

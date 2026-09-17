@@ -1,6 +1,6 @@
 /**
- * Offline smoke test for research-studio tool modules.
- * Run: node plugins/research-studio/selftest.mjs
+ * Offline smoke test for document-writer tool modules.
+ * Run: node plugins/document-writer/selftest.mjs
  *
  * All tests run offline — no PDF providers, no ref providers, no LLMs.
  * Ref lookup is forced into RESEARCH_OFFLINE=1 so Crossref is skipped.
@@ -79,7 +79,7 @@ const ok = (label, cond, detail) => {
 
 // ── Fake state (streams + SQL) ──────────────────────────────────────────
 const streams = [];
-const tables = { research_documents: [], research_compilations: [] };
+const tables = { documents: [], compilations: [] };
 const insert = (table, row) => { const next = { id: tables[table].length + 1, ...row }; tables[table].push(next); return { lastInsertRowid: next.id }; };
 const fakeState = {
   tables,
@@ -87,25 +87,25 @@ const fakeState = {
   list: (stream, opts = {}) => streams.filter(r => r.stream === stream).slice(0, opts.limit || 20),
   query: (sql, params = []) => {
     const s = String(sql).replace(/\s+/g, ' ').trim();
-    if (s.startsWith('INSERT INTO research_documents')) {
-      return insert('research_documents', {
+    if (s.startsWith('INSERT INTO documents')) {
+      return insert('documents', {
         slug: params[0], title: params[1], kind: params[2], venue: params[3],
         dsl_path: params[4], md_path: params[5], status: params[6],
         word_count: params[7], created_at: params[8], updated_at: params[9],
       });
     }
-    if (s.startsWith('UPDATE research_documents SET title')) {
+    if (s.startsWith('UPDATE documents SET title')) {
       const [title, kind, venue, dslPath, mdPath, status, wordCount, updated, slug] = params;
-      for (const row of tables.research_documents) {
+      for (const row of tables.documents) {
         if (row.slug === slug) Object.assign(row, { title, kind, venue, dsl_path: dslPath, md_path: mdPath, status, word_count: wordCount, updated_at: updated });
       }
-      return { changes: tables.research_documents.filter(r => r.slug === slug).length };
+      return { changes: tables.documents.filter(r => r.slug === slug).length };
     }
-    if (s.startsWith('SELECT id FROM research_documents WHERE slug = ?')) {
-      return tables.research_documents.filter(r => r.slug === params[0]).slice(-1);
+    if (s.startsWith('SELECT id FROM documents WHERE slug = ?')) {
+      return tables.documents.filter(r => r.slug === params[0]).slice(-1);
     }
-    if (s.startsWith('INSERT INTO research_compilations')) {
-      return insert('research_compilations', {
+    if (s.startsWith('INSERT INTO compilations')) {
+      return insert('compilations', {
         slug: params[0], target: params[1], output_path: params[2], status: params[3],
         notes: params[4], created_at: params[5],
       });
@@ -115,7 +115,7 @@ const fakeState = {
 };
 
 // ── Sandbox ────────────────────────────────────────────────────────────
-const sandbox = path.join(process.cwd(), '.research-studio-selftest');
+const sandbox = path.join(process.cwd(), '.document-writer-selftest');
 fs.rmSync(sandbox, { recursive: true, force: true });
 fs.mkdirSync(sandbox, { recursive: true });
 const cwd = sandbox;
@@ -551,4 +551,4 @@ const cwd = sandbox;
 try { fs.rmSync(sandbox, { recursive: true, force: true }); } catch { /* ok */ }
 
 if (failures) { console.error(`\n${failures} failure(s)`); process.exit(1); }
-console.log('\nALL RESEARCH-STUDIO SELFTESTS PASSED');
+console.log('\nALL DOCUMENT-WRITER SELFTESTS PASSED');

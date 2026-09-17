@@ -1,6 +1,6 @@
-# research-studio
+# document-writer
 
-Compositional research-document studio. Produces **research papers**, **patent applications** (with full USPTO XML output), **technical reports**, and **grant proposals** from source material (PDFs, notes, experimental data, URLs). Documents live as a JSON DSL, compile to Markdown / LaTeX / PDF / DOCX / USPTO XML on demand. Domain specialists — **Source**, **Outline**, **Draft**, **Cite**, **Vision Analyst**, **Figure**, **Claim**, **Style**, **Reviewer**, plus patent-only **Prior Art** and **Claim Author** — each own a slice of the DSL and are orchestrated by a Research Director.
+Compositional document writer. Produces **research papers**, **patent applications** (with full USPTO XML output), **technical reports**, **grant proposals**, and **literature reviews** from source material (PDFs, notes, experimental data, URLs). Documents live as a JSON DSL, compile to Markdown / LaTeX / PDF / DOCX / USPTO XML on demand. Watermarking (DRAFT / CONFIDENTIAL / auto-DRAFT when unverified claims exist) renders across every target. Domain specialists — **Source**, **Outline**, **Draft**, **Cite**, **Vision Analyst**, **Figure**, **Claim**, **Style**, **Reviewer**, plus patent-only **Prior Art** and **Claim Author** — each own a slice of the DSL and are orchestrated by a Document Director.
 
 ## Prerequisites
 
@@ -14,7 +14,7 @@ Compositional research-document studio. Produces **research papers**, **patent a
 
 ```bash
 # From the awesome-bahulam-plugins repo root
-node plugins/research-studio/selftest.mjs
+node plugins/document-writer/selftest.mjs
 ```
 
 ## Design principles
@@ -30,7 +30,7 @@ node plugins/research-studio/selftest.mjs
 1. Source layer      document.json (DSL) — outline, sections, refs, figures, claims, sources
 2. Composition layer compile(doc) → document.md + refs.bib always in sync; tex/pdf on demand
 3. Authoring layer   ~25 tools grouped by specialist (all pure state mutations)
-4. Persistence       SQLite (research_documents, research_compilations) + snapshots + sources
+4. Persistence       SQLite (documents, compilations) + snapshots + sources
 ```
 
 ## Document folder layout
@@ -50,7 +50,7 @@ node plugins/research-studio/selftest.mjs
 ## Agent topology
 
 ```
-                     ┌─ Research Director ─────────────────────────────┐
+                     ┌─ Document Director ─────────────────────────────┐
                      │                                                 │
                      ▼                                                 ▼
                   Planner                                    (compile_document
@@ -69,7 +69,7 @@ node plugins/research-studio/selftest.mjs
 
 | Agent | Owns | Gateway | File |
 |-------|------|---------|------|
-| **Research Director** | orchestration + user-facing | text (default) | `config/workspace.yaml` |
+| **Document Director** | orchestration + user-facing | text (default) | `config/workspace.yaml` |
 | **Plan** | outline & source-ingest plan (read-only) | text | `config/agents/plan.yaml` |
 | **Source** | `sources.*` | text | `config/agents/source.yaml` |
 | **Outline** | `outline[]` | text | `config/agents/outline.yaml` |
@@ -167,7 +167,7 @@ Add new venues by dropping a YAML file — no code change.
 
 ## Panels (workspace views)
 
-- **Research Studio** (`workspace/studio.html`) — document gallery with word counts, kind/venue badges, links to `document.md`.
+- **Document Writer** (`workspace/studio.html`) — document gallery with word counts, kind/venue badges, links to `document.md`.
 - **References** (`workspace/references.html`) — BibTeX table per document with DOI links, bib style.
 - **Sources** (`workspace/sources.html`) — ingested PDFs / URLs / experiments per document, provider + extracted-chars badges.
 - **Compilations** (`workspace/compile.html`) — history of compile runs with status badges and links to output files.
@@ -195,7 +195,7 @@ User: "Draft a NeurIPS paper on Amoeba Attention from these three PDFs; the clai
 ## Plugin source layout
 
 ```
-plugins/research-studio/
+plugins/document-writer/
 ├── plugin.yaml
 ├── tools/
 │   ├── lib.mjs                       # DSL helpers + state
@@ -216,7 +216,7 @@ plugins/research-studio/
 │   ├── add-prior-art.mjs / set-claim-novelty.mjs / check-claim-hierarchy.mjs
 │   └── providers/                    # pdf (local + mistral), ref (local + crossref) — no LLM providers here
 ├── config/
-│   ├── workspace.yaml                # Research Director
+│   ├── workspace.yaml                # Document Director
 │   ├── agents/                       # plan / source / outline / draft / cite / vision-analyst /
 │   │                                 # figure / claim / style / reviewer / prior-art / claim-author
 │   ├── venues/                       # arxiv / ieee-conf / neurips / acl / acm / uspto-utility / epo-utility / nsf-grant
