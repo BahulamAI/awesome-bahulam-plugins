@@ -60,7 +60,7 @@
       "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
       "ref": "main",
       "subdir": "plugins/research-studio",
-      "description": "Compositional research-document studio for papers, patents, technical reports, and grants. Scenes stored as a JSON DSL; document.md and refs.bib always kept in sync. Domain specialists (Source / Outline / Draft / Cite / Vision Analyst) each own a slice of the DSL. Every claim traces to a source; compile refuses to emit final targets while unverified claims exist. Zero-credential local providers for PDF text extract and reference lookup; upgrade paths for Mistral OCR and Crossref.",
+      "description": "Compositional research-document studio for papers, patents (with USPTO XML output), technical reports, and grants. Documents stored as a JSON DSL; document.md and refs.bib always kept in sync. Domain specialists (Source / Outline / Draft / Cite / Vision Analyst / Figure / Claim / Style / Reviewer, plus patent-only Prior Art and Claim Author) each own a slice of the DSL. Every claim traces to a source; compile refuses to emit final targets while unverified claims exist. Compile to md / tex / pdf / docx / uspto_xml. Zero-credential local providers for PDF text extract and reference lookup; upgrade paths for Mistral OCR and Crossref.",
       "author": "BahulamAI",
       "tags": ["research", "paper", "patent", "academia", "citation", "bibtex", "latex", "pandoc", "dsl", "vision"]
     },

@@ -228,5 +228,73 @@ function bibStyleFor(venue) {
   }
 }
 
+// ── USPTO utility application XML ────────────────────────────────────────
+// Minimal patent-shaped XML — fields required for a USPTO utility
+// application filing (structure follows the USPTO Patent Application
+// Publication XML schema conceptually, not byte-for-byte).
+export function compileUsptoXml(doc) {
+  if (doc.kind !== 'patent_application') {
+    throw new Error(`compileUsptoXml: document kind is "${doc.kind}", not patent_application`);
+  }
+  const patent = doc.patent || {};
+  const sections = doc.outline || [];
+  const sectionBody = (id) => escapeXml(doc.sections?.[id]?.content || '');
+
+  const inventorsXml = (patent.inventors || []).map(inv => `
+      <inventor>
+        <first-name>${escapeXml(String(inv.name || '').split(/\s+/)[0] || '')}</first-name>
+        <last-name>${escapeXml(String(inv.name || '').split(/\s+/).slice(1).join(' '))}</last-name>
+      </inventor>`).join('');
+
+  const claimsXml = (patent.claims_tree || []).map(c => `
+    <claim id="claim-${escapeXml(c.id)}" claim-num="${escapeXml(c.id)}">
+      ${c.kind === 'dependent' ? `<claim-ref idref="claim-${escapeXml(c.depends_on || '')}"/>` : ''}
+      <claim-text>${escapeXml(c.text || '')}</claim-text>
+    </claim>`).join('');
+
+  const priorArtXml = (patent.prior_art || []).map(p => {
+    const ref = doc.references?.[p.ref_id] || { fields: {} };
+    return `
+    <us-citation relevance="${escapeXml(p.relevance || '')}">
+      <ref-id>${escapeXml(p.ref_id)}</ref-id>
+      <title>${escapeXml(ref.fields?.title || '')}</title>
+      <year>${escapeXml(String(ref.fields?.year || ''))}</year>
+      <doi>${escapeXml(ref.fields?.doi || '')}</doi>
+    </us-citation>`;
+  }).join('');
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<us-patent-application lang="EN" type="${escapeXml(patent.type || 'utility')}">
+  <us-bibliographic-data-application>
+    <invention-title>${escapeXml(doc.title || doc.slug || '')}</invention-title>
+    <priority-date>${escapeXml(patent.priority_date || '')}</priority-date>
+    <inventors>${inventorsXml}
+    </inventors>
+  </us-bibliographic-data-application>
+  <abstract><p>${escapeXml(doc.abstract || sectionBody('abstract_pat'))}</p></abstract>
+  <description>
+    <field>${sectionBody('field')}</field>
+    <background>${sectionBody('background')}</background>
+    <summary>${sectionBody('summary')}</summary>
+    <brief-description-of-drawings>${sectionBody('drawings')}</brief-description-of-drawings>
+    <detailed-description>${sectionBody('detailed')}</detailed-description>
+  </description>
+  <us-references-cited>${priorArtXml}
+  </us-references-cited>
+  <claims>${claimsXml}
+  </claims>
+</us-patent-application>
+`;
+}
+
+function escapeXml(s) {
+  return String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
 // Named + default export
-export default { compileMarkdown, compileBibtex, compileLatex };
+export default { compileMarkdown, compileBibtex, compileLatex, compileUsptoXml };

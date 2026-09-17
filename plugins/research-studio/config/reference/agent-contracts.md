@@ -19,10 +19,23 @@ files.
 | Section list, order, targets | **Outline** | `outline[]`, indirectly `sections[]` (drops content on delete) |
 | Prose per section | **Draft** | `sections[id].content`, `sections[id].cites` (derived), `todos[]` |
 | References + citation attachments | **Cite** | `references.*`, `sections[id].cites`, `meta.bib_style` |
-| Figure extraction, description, claim verification | **Vision Analyst** | `figures[]` (add), `figures[id].{description,caption}`, `claims[id].verification`, `claims[id].verified` |
+| Figure extraction (PDF), description, claim verification | **Vision Analyst** | `figures[]` (add), `figures[id].{description,caption}`, `claims[id].verification`, `claims[id].verified` |
+| Figure import + placement + caption | **Figure** | `figures[]` (add/edit `caption`/`placement`/`referenced_in`), `sections[id].figures` |
+| Claim extraction from prose | **Claim** | `claims[]`, `sections[id].claims` |
+| Venue template + compliance | **Style** | `venue`, `meta.bib_style`, `outline[]` (appends missing required sections), `meta.venue_pack` |
+| Review authoring | **Reviewer** | `reviews[]` |
+| Cross-plugin figure gen (delegate ask) | **Figure** requests, Director delegates | `figures[]` (add via import_figure after generation) |
 | Outline/plan proposals | **Plan** (read-only) | — |
 | Compile targets, unsupported-claim gating | **Director** | via `compile_document` |
-| Cross-plugin figure gen *(Phase 2)* | **Draft** delegates to threejs-studio / manim-studio | `figures[]` (add) |
+
+Patent-only (activated when `kind === "patent_application"`):
+
+| Concern | Owner | DSL fields it may mutate |
+|---|---|---|
+| Patent metadata (type, priority_date, inventors) | **Claim Author** | `patent.{type, priority_date, inventors}` |
+| Independent + dependent claim authoring | **Claim Author** | `patent.claims_tree[]` (add/update) |
+| Prior-art registration + novelty verdicts | **Prior Art** | `patent.prior_art[]`, `patent.claims_tree[id].novelty` |
+| Hierarchy validation | **Claim Author** (via check_claim_hierarchy) | — |
 
 ## Cross-cutting rules
 
@@ -83,11 +96,22 @@ forwarded. So the handoff must be self-contained.
 |---|---|
 | "Ingest these 3 PDFs" | Source |
 | "Look up DOI 10.xxxx" | Cite |
-| "Set the outline to NeurIPS structure" | Outline |
+| "Set the outline to NeurIPS structure" | Outline (or Style: `apply_venue_template neurips`) |
 | "Draft the Method section" | Draft |
 | "Attach [smith2024] and [chen2023] to Method" | Cite |
+| "Import this diagram as Figure 3" | Figure |
+| "Place Figure 3 in Method and Results" | Figure |
 | "Extract figures from smith2024.pdf" | Vision Analyst |
 | "Describe Figure 2" | Vision Analyst |
 | "Verify our O(n log n) claim against Figure 2" | Vision Analyst |
-| "Compile to PDF" | Director (calls compile_document) |
-| "Merge duplicate references" | Cite (dedupe_references) |
+| "List every unsupported claim in the paper" | Claim (`list_unsupported_claims`) |
+| "Extract quantitative claims from Results" | Claim |
+| "Check we're within the NeurIPS 9-page limit" | Style (`check_length` + `check_venue_compliance`) |
+| "Give me a harsh_academic review of the draft" | Reviewer |
+| "Compile to PDF" / "DOCX" / "USPTO XML" | Director (`compile_document`) |
+| "Merge duplicate references" | Cite (`dedupe_references`) |
+| "Add an independent claim about the coupling method" *(patent)* | Claim Author |
+| "Narrow claim 1 to avoid overlap with prior art" *(patent)* | Claim Author |
+| "Add US Patent 1,234,567 as prior art" *(patent)* | Prior Art |
+| "Assess novelty of every patent claim" *(patent)* | Prior Art |
+| "Check the patent claims tree is well-formed" *(patent)* | Claim Author (`check_claim_hierarchy`) |

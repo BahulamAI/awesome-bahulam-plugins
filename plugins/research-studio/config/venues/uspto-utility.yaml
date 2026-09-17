@@ -1,0 +1,18 @@
+key: uspto-utility
+name: USPTO Utility Application
+kind_defaults: [patent_application]
+document_class: article
+class_options: [12pt]
+packages: [geometry, graphicx, setspace]
+geometry: [margin=1in]
+bib_style: plain
+required_sections: [field, background, summary, drawings, detailed, claims, abstract_pat]
+length:
+  target_pages: null
+  hard_limit_pages: null
+notes: |
+  US Patent and Trademark Office utility application. Double-spaced,
+  12 pt, 1-inch margins. Sections have canonical order: Field / Background /
+  Summary / Brief Description of Drawings / Detailed Description / Claims /
+  Abstract. Claims must be numbered starting at 1; dependent claims
+  reference their parent by number. Prior art is cited via us-references-cited.

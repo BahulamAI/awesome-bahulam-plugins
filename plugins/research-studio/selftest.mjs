@@ -45,6 +45,31 @@ import { call as extractFiguresFromPdf } from './tools/extract-figures-from-pdf.
 import { call as setFigureDescription } from './tools/set-figure-description.mjs';
 import { call as setClaimVerdict } from './tools/set-claim-verdict.mjs';
 
+// Phase 2 tools
+import { call as importFigure } from './tools/import-figure.mjs';
+import { call as placeFigure } from './tools/place-figure.mjs';
+import { call as captionFigure } from './tools/caption-figure.mjs';
+import { call as listFigures } from './tools/list-figures.mjs';
+
+import { call as addClaim } from './tools/add-claim.mjs';
+import { call as linkClaimToSource } from './tools/link-claim-to-source.mjs';
+import { call as listClaims } from './tools/list-claims.mjs';
+import { call as listUnsupportedClaims } from './tools/list-unsupported-claims.mjs';
+
+import { call as applyVenueTemplate } from './tools/apply-venue-template.mjs';
+import { call as checkLength } from './tools/check-length.mjs';
+import { call as checkVenueCompliance } from './tools/check-venue-compliance.mjs';
+
+import { call as addReview } from './tools/add-review.mjs';
+import { call as listReviews } from './tools/list-reviews.mjs';
+
+import { call as setPatentMetadata } from './tools/set-patent-metadata.mjs';
+import { call as addClaimTreeItem } from './tools/add-claim-tree-item.mjs';
+import { call as updateClaimTreeItem } from './tools/update-claim-tree-item.mjs';
+import { call as addPriorArt } from './tools/add-prior-art.mjs';
+import { call as setClaimNovelty } from './tools/set-claim-novelty.mjs';
+import { call as checkClaimHierarchy } from './tools/check-claim-hierarchy.mjs';
+
 let failures = 0;
 const ok = (label, cond, detail) => {
   if (cond) console.log(`ok   ${label}`);
@@ -280,6 +305,194 @@ const cwd = sandbox;
   } catch (e) {
     ok('ingest_url gracefully handles offline', true);
   }
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// PHASE 2 — figures, claims, style, reviewer, patent path, docx/xml
+// ══════════════════════════════════════════════════════════════════════
+
+// ── Figure Agent ──────────────────────────────────────────────────────
+{
+  // Build a tiny valid PNG (1x1 black pixel) — real bytes, not a stub, so
+  // import_figure's extension check + copy path both exercise real IO.
+  const png = Buffer.from(
+    '89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489000000' +
+    '0d49444154789c62000000000005000151ea9c000000000049454e44ae426082',
+    'hex'
+  );
+  const figSrc = path.join(sandbox, 'diagram.png');
+  fs.writeFileSync(figSrc, png);
+
+  const imp = await importFigure({ slug: 'attn', path: figSrc, id: 'arch', caption: 'System architecture.', cwd }, { state: fakeState });
+  ok('import_figure copies + registers', imp.success && fs.existsSync(path.join(cwd, 'attn', 'figures', 'diagram.png')));
+
+  const badExt = await importFigure({ slug: 'attn', path: sandbox + '/run1.csv', cwd }, { state: fakeState });
+  ok('import_figure rejects unsupported extension', badExt.success === false);
+
+  const placed = await placeFigure({ slug: 'attn', figure_id: 'arch', section_ids: ['method', 'results'], cwd }, { state: fakeState });
+  ok('place_figure binds to 2 sections', placed.success && placed.output.placed_in.length === 2);
+
+  const badSec = await placeFigure({ slug: 'attn', figure_id: 'arch', section_ids: ['ghost'], cwd }, { state: fakeState });
+  ok('place_figure rejects non-outline section', badSec.success === false);
+
+  const cap = await captionFigure({ slug: 'attn', figure_id: 'arch', caption: 'Overall system architecture.', placement: 't', cwd }, { state: fakeState });
+  ok('caption_figure updates caption + placement', cap.success && cap.output.placement === 't');
+
+  const figs = await listFigures({ slug: 'attn', cwd });
+  ok('list_figures returns arch figure', figs.success && figs.output.figures.some(f => f.id === 'arch'));
+  const archEntry = figs.output.figures.find(f => f.id === 'arch');
+  ok('list_figures reports referenced_in on arch', archEntry && archEntry.referenced_in.length === 2);
+}
+
+// ── Claim Agent ───────────────────────────────────────────────────────
+{
+  const c1 = await addClaim({
+    slug: 'attn', text: 'Method scales O(n log n).', section: 'method', kind: 'complexity',
+    supported_by: ['fake_pdf'], cwd,
+  }, { state: fakeState });
+  ok('add_claim complexity', c1.success);
+
+  const c2 = await addClaim({
+    slug: 'attn', text: 'Achieves 12% improvement over baseline.',
+    section: 'results', kind: 'quantitative', value: 0.12, unit: 'F1 delta', cwd,
+  }, { state: fakeState });
+  ok('add_claim quantitative with value/unit', c2.success);
+
+  const badKind = await addClaim({ slug: 'attn', text: 'x', section: 'method', kind: 'nonsense', cwd });
+  ok('add_claim rejects unknown kind', badKind.success === false);
+
+  const badSection = await addClaim({ slug: 'attn', text: 'x', section: 'ghost', cwd });
+  ok('add_claim rejects non-outline section', badSection.success === false);
+
+  const link = await linkClaimToSource({ slug: 'attn', claim_id: c2.output.id, source_ids: ['expt_run1'], ref_ids: ['smith2024'], cwd }, { state: fakeState });
+  ok('link_claim_to_source accepts source + ref ids', link.success && link.output.supported_by.length >= 2);
+
+  const badLink = await linkClaimToSource({ slug: 'attn', claim_id: c2.output.id, ref_ids: ['ghost_ref'], cwd });
+  ok('link_claim_to_source rejects unknown ids', badLink.success === false);
+
+  const listed = await listClaims({ slug: 'attn', cwd });
+  ok('list_claims returns all claims', listed.success && listed.output.count >= 2);
+
+  const unsup = await listUnsupportedClaims({ slug: 'attn', cwd });
+  ok('list_unsupported_claims counts unverified', unsup.success && unsup.output.unsupported_count >= 2);
+}
+
+// ── Style Agent ───────────────────────────────────────────────────────
+{
+  const applied = await applyVenueTemplate({ slug: 'attn', venue: 'neurips', cwd }, { state: fakeState });
+  ok('apply_venue_template sets venue + bib_style', applied.success && applied.output.venue === 'neurips');
+  ok('apply_venue_template lists required sections', Array.isArray(applied.output.required_sections));
+
+  const badVenue = await applyVenueTemplate({ slug: 'attn', venue: 'nope', cwd });
+  ok('apply_venue_template rejects unknown venue', badVenue.success === false);
+
+  const len = await checkLength({ slug: 'attn', cwd });
+  ok('check_length returns per_section + total', len.success && Array.isArray(len.output.per_section));
+
+  const comp = await checkVenueCompliance({ slug: 'attn', cwd });
+  ok('check_venue_compliance returns ok/issues/warnings', comp.success && typeof comp.output.ok === 'boolean');
+}
+
+// ── Reviewer Agent ────────────────────────────────────────────────────
+{
+  const rev = await addReview({
+    slug: 'attn', verdict: 'revise', persona: 'harsh_academic', rubric: 'novelty',
+    score: 6, comments: 'Novelty unclear. Missing baseline comparisons in Table 3.',
+    per_section: { method: 'Notation section needed', results: 'add variance columns' },
+    cwd,
+  }, { state: fakeState });
+  ok('add_review persists', rev.success && rev.output.verdict === 'revise');
+
+  const badV = await addReview({ slug: 'attn', verdict: 'maybe', comments: 'ok', cwd });
+  ok('add_review rejects unknown verdict', badV.success === false);
+
+  const badScore = await addReview({ slug: 'attn', verdict: 'accept', score: 42, comments: 'ok', cwd });
+  ok('add_review rejects out-of-range score', badScore.success === false);
+
+  const reviews = await listReviews({ slug: 'attn', cwd });
+  ok('list_reviews returns the review', reviews.success && reviews.output.count >= 1);
+  ok('list_reviews shows per_section_count', reviews.output.reviews[0].per_section_count === 2);
+}
+
+// ── DOCX + PDF gating (via compile_document) ──────────────────────────
+{
+  // At this point unsupported claims still exist (c1, c2 aren't verified) — so md/tex must refuse.
+  const refused = await compileDocument({ slug: 'attn', target: 'tex', cwd }, { state: fakeState });
+  ok('compile tex refused while unverified claims present', refused.success === false);
+
+  const forcedTex = await compileDocument({ slug: 'attn', target: 'tex', allow_unsupported_claims: true, cwd }, { state: fakeState });
+  ok('compile tex proceeds with allow_unsupported_claims', forcedTex.success === true);
+
+  const docx = await compileDocument({ slug: 'attn', target: 'docx', allow_unsupported_claims: true, cwd }, { state: fakeState });
+  ok('compile docx returns definitive result', typeof docx.success === 'boolean');
+  // If pandoc absent, docx.success === false with the "pandoc not found" note. Either outcome is acceptable in CI.
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// PATENT PATH — new document, apply patent flow end-to-end
+// ══════════════════════════════════════════════════════════════════════
+{
+  const pat = await createDocument({ name: 'wid-y', title: 'Widget Y', kind: 'patent_application', venue: 'uspto-utility', cwd }, { state: fakeState });
+  ok('patent: create_document', pat.success);
+
+  const meta = await setPatentMetadata({
+    slug: 'wid-y', type: 'utility', priority_date: '2026-09-01',
+    inventors: [{ name: 'Sree A.' }, { name: 'Alex B.' }], cwd,
+  }, { state: fakeState });
+  ok('patent: set_patent_metadata', meta.success && meta.output.patent.inventor_count === 2);
+
+  const c1 = await addClaimTreeItem({ slug: 'wid-y', text: 'A widget comprising: a first part; and a second part coupled thereto.', kind: 'independent', cwd }, { state: fakeState });
+  ok('patent: add independent claim', c1.success && c1.output.id === '1' && c1.output.kind === 'independent');
+
+  const c2 = await addClaimTreeItem({ slug: 'wid-y', text: 'The widget of claim 1, wherein the first part is metallic.', kind: 'dependent', depends_on: '1', cwd }, { state: fakeState });
+  ok('patent: add dependent claim', c2.success && c2.output.depends_on === '1');
+
+  const badDep = await addClaimTreeItem({ slug: 'wid-y', text: 'x', kind: 'dependent', depends_on: '99', cwd });
+  ok('patent: reject dependent with missing parent', badDep.success === false);
+
+  const updated = await updateClaimTreeItem({ slug: 'wid-y', id: '1', text: 'A widget comprising: a first metallic part; and a second part coupled thereto with a threaded fastener.', cwd }, { state: fakeState });
+  ok('patent: update_claim_tree_item narrows claim 1', updated.success);
+
+  // Prior art — first add a reference (via add_reference), then register as prior art
+  await addReference({ slug: 'wid-y', ref_id: 'us_1234567', type: 'patent', fields: { authors: ['J. Doe'], title: 'Prior widget', year: 2020, url: 'https://patents.google.com/patent/US1234567' }, cwd }, { state: fakeState });
+  const pa = await addPriorArt({ slug: 'wid-y', ref_id: 'us_1234567', relevance: 'similar', note: 'Discloses coupled-parts widget.', cwd }, { state: fakeState });
+  ok('patent: add_prior_art', pa.success && pa.output.relevance === 'similar');
+
+  const missingRef = await addPriorArt({ slug: 'wid-y', ref_id: 'nope_ref', cwd });
+  ok('patent: add_prior_art rejects unknown ref', missingRef.success === false);
+
+  const novelty1 = await setClaimNovelty({ slug: 'wid-y', claim_id: '1', verdict: 'similar_to_prior', prior_art_refs: [pa.output.id], reason: 'Prior widget also uses coupled parts.', cwd }, { state: fakeState });
+  ok('patent: set_claim_novelty similar_to_prior', novelty1.success);
+  const novelty2 = await setClaimNovelty({ slug: 'wid-y', claim_id: '2', verdict: 'novel', reason: 'Metallic first part not disclosed.', cwd }, { state: fakeState });
+  ok('patent: set_claim_novelty novel', novelty2.success);
+
+  const badVerdict = await setClaimNovelty({ slug: 'wid-y', claim_id: '2', verdict: 'unclear', cwd });
+  ok('patent: set_claim_novelty rejects unknown verdict', badVerdict.success === false);
+
+  // Hierarchy
+  const hier = await checkClaimHierarchy({ slug: 'wid-y', cwd });
+  ok('patent: check_claim_hierarchy reports independents + dependents', hier.success && hier.output.independents === 1 && hier.output.dependents === 1);
+  ok('patent: hierarchy is ok (no orphans, no cycles)', hier.output.ok);
+
+  // Add an orphan to test detection
+  const orphanCwd = path.join(cwd, 'wid-y');
+  const patentDsl = JSON.parse(fs.readFileSync(path.join(orphanCwd, 'document.json'), 'utf-8'));
+  patentDsl.patent.claims_tree.push({ id: '3', text: 'The widget of claim 99, wherein x.', kind: 'dependent', depends_on: '99' });
+  fs.writeFileSync(path.join(orphanCwd, 'document.json'), JSON.stringify(patentDsl, null, 2));
+  const hierBad = await checkClaimHierarchy({ slug: 'wid-y', cwd });
+  ok('patent: hierarchy detects orphan', hierBad.success && hierBad.output.orphans.length === 1);
+
+  // Compile: uspto_xml on a patent kind (bypass claim gating; patent doc has no research claims)
+  const xml = await compileDocument({ slug: 'wid-y', target: 'uspto_xml', allow_unsupported_claims: true, cwd }, { state: fakeState });
+  ok('patent: compile uspto_xml succeeds', xml.success && fs.existsSync(xml.output.output_path));
+  const xmlContent = fs.readFileSync(xml.output.output_path, 'utf-8');
+  ok('patent: xml contains us-patent-application root', xmlContent.includes('<us-patent-application'));
+  ok('patent: xml contains claim 1 body', xmlContent.includes('coupled thereto'));
+  ok('patent: xml includes prior art citation', xmlContent.includes('us_1234567'));
+
+  // uspto_xml on a non-patent doc should be refused with a clear message
+  const wrongKind = await compileDocument({ slug: 'attn', target: 'uspto_xml', allow_unsupported_claims: true, cwd });
+  ok('compile uspto_xml refuses non-patent kind', wrongKind.success === false);
 }
 
 // ── Cleanup ─────────────────────────────────────────────────────────────

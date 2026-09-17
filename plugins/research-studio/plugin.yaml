@@ -2,17 +2,18 @@ apiVersion: bahulam.plugin/1
 kind: Plugin
 metadata:
   name: research-studio
-  version: 0.1.0
+  version: 0.2.0
   description: >
     Compositional research-document studio. Produces research papers,
     patent applications, technical reports, and grant proposals from
     source material (PDFs, notes, experiments, URLs) with claim
-    verification and venue-specific formatting. Scenes are stored as a
-    JSON DSL and compiled to Markdown / LaTeX / PDF (via pandoc) on
-    every mutation. Vision-capable agents describe and cross-check
-    figures. Domain specialists (Source, Outline, Draft, Cite, Vision)
-    each own a slice of the DSL and are orchestrated by a Research
-    Director.
+    verification and venue-specific formatting. Documents are stored
+    as a JSON DSL and compiled to Markdown / LaTeX / PDF / DOCX / USPTO
+    XML on demand. Vision-capable agents describe and cross-check
+    figures. Domain specialists (Source, Outline, Draft, Cite, Vision,
+    Figure, Claim, Style, Reviewer, plus patent-only Prior Art and
+    Claim Author) each own a slice of the DSL and are orchestrated by
+    a Research Director.
   author: BahulamAI
   repository: https://github.com/BahulamAI/awesome-bahulam-plugins
 
@@ -132,7 +133,7 @@ config:
         type: object
         properties:
           slug:   { type: string }
-          target: { type: string, enum: [md, tex, pdf] }
+          target: { type: string, enum: [md, tex, pdf, docx, uspto_xml] }
           allow_unsupported_claims: { type: boolean, description: "Default false — refuses to compile 'final' with unverified claims." }
           cwd:    { type: string }
         required: [slug, target]
@@ -408,6 +409,271 @@ config:
           cwd:        { type: string }
         required: [slug, claim_id, verdict]
 
+    # ── Figure Agent ────────────────────────────────────────────────
+    - name: import_figure
+      description: >
+        Register an image/figure file into figures/. Copies from an
+        absolute path or URL into the document folder. Does NOT place
+        the figure in a section — call place_figure for that.
+      tool: ./tools/import-figure.mjs
+      parameters:
+        type: object
+        properties:
+          slug:      { type: string }
+          path:      { type: string, description: "Local path, relative-to-doc path, or https URL." }
+          id:        { type: string, description: "Figure id (default: filename stem)." }
+          caption:   { type: string }
+          placement: { type: string, enum: [h, t, b, H], description: "LaTeX float placement (default h)." }
+          cwd:       { type: string }
+        required: [slug, path]
+
+    - name: place_figure
+      description: Bind a registered figure to one or more outline sections.
+      tool: ./tools/place-figure.mjs
+      parameters:
+        type: object
+        properties:
+          slug:        { type: string }
+          figure_id:   { type: string }
+          section_ids: { type: array, items: { type: string } }
+          cwd:         { type: string }
+        required: [slug, figure_id, section_ids]
+
+    - name: caption_figure
+      description: Set the short caption (or placement) on a registered figure.
+      tool: ./tools/caption-figure.mjs
+      parameters:
+        type: object
+        properties:
+          slug:      { type: string }
+          figure_id: { type: string }
+          caption:   { type: string }
+          placement: { type: string, enum: [h, t, b, H] }
+          cwd:       { type: string }
+        required: [slug, figure_id]
+
+    - name: list_figures
+      description: Return the figure manifest for a document.
+      tool: ./tools/list-figures.mjs
+      parameters:
+        type: object
+        properties:
+          slug: { type: string }
+          cwd:  { type: string }
+        required: [slug]
+
+    # ── Claim Agent ─────────────────────────────────────────────────
+    - name: add_claim
+      description: >
+        Register a verifiable assertion (quantitative / complexity /
+        qualitative / novelty). Claim starts unverified — Vision
+        Analyst flips verified=true via set_claim_verdict.
+      tool: ./tools/add-claim.mjs
+      parameters:
+        type: object
+        properties:
+          slug:         { type: string }
+          text:         { type: string }
+          section:      { type: string }
+          id:           { type: string }
+          kind:         { type: string, enum: [quantitative, complexity, qualitative, novelty] }
+          supported_by: { type: array, items: { type: string }, description: "source ids OR ref ids" }
+          value:        { type: number, description: "Numeric value for quantitative claims." }
+          unit:         { type: string }
+          cwd:          { type: string }
+        required: [slug, text, section]
+
+    - name: link_claim_to_source
+      description: Attach source ids or reference ids to a claim's supported_by list.
+      tool: ./tools/link-claim-to-source.mjs
+      parameters:
+        type: object
+        properties:
+          slug:       { type: string }
+          claim_id:   { type: string }
+          source_ids: { type: array, items: { type: string } }
+          ref_ids:    { type: array, items: { type: string } }
+          cwd:        { type: string }
+        required: [slug, claim_id]
+
+    - name: list_claims
+      description: List claims (optionally filter by section / verified).
+      tool: ./tools/list-claims.mjs
+      parameters:
+        type: object
+        properties:
+          slug:     { type: string }
+          section:  { type: string }
+          verified: { type: boolean }
+          cwd:      { type: string }
+        required: [slug]
+
+    - name: list_unsupported_claims
+      description: >
+        Return claims where verified !== true OR supported_by is empty.
+        The Director runs this before compiling non-Markdown targets.
+      tool: ./tools/list-unsupported-claims.mjs
+      parameters:
+        type: object
+        properties:
+          slug: { type: string }
+          cwd:  { type: string }
+        required: [slug]
+
+    # ── Style Agent ─────────────────────────────────────────────────
+    - name: apply_venue_template
+      description: >
+        Apply a venue pack (config/venues/*.yaml) to the document —
+        sets venue + bib_style, and appends any missing required
+        sections.
+      tool: ./tools/apply-venue-template.mjs
+      parameters:
+        type: object
+        properties:
+          slug:  { type: string }
+          venue: { type: string, description: "arxiv | ieee-conf | neurips | acl | acm | uspto-utility | epo-utility | nsf-grant" }
+          cwd:   { type: string }
+        required: [slug, venue]
+
+    - name: check_length
+      description: Return per-section word count vs target plus totals.
+      tool: ./tools/check-length.mjs
+      parameters:
+        type: object
+        properties:
+          slug: { type: string }
+          cwd:  { type: string }
+        required: [slug]
+
+    - name: check_venue_compliance
+      description: >
+        Cross-check document against its venue pack (required sections,
+        bib style, page limits). Returns { ok, issues[], warnings[] }.
+      tool: ./tools/check-venue-compliance.mjs
+      parameters:
+        type: object
+        properties:
+          slug: { type: string }
+          cwd:  { type: string }
+        required: [slug]
+
+    # ── Reviewer Agent ──────────────────────────────────────────────
+    - name: add_review
+      description: >
+        Persist a review the Reviewer Agent authored via its own
+        gateway. verdict is accept | revise | reject; optional score 0-10.
+      tool: ./tools/add-review.mjs
+      parameters:
+        type: object
+        properties:
+          slug:        { type: string }
+          verdict:     { type: string, enum: [accept, revise, reject] }
+          comments:    { type: string }
+          persona:     { type: string, description: "e.g. harsh_academic | industry_engineer | patent_examiner" }
+          rubric:      { type: string, description: "e.g. novelty | clarity | rigor | contribution" }
+          score:       { type: number, description: "0-10" }
+          per_section: { type: object, description: "Map { section_id -> comment }." }
+          id:          { type: string }
+          cwd:         { type: string }
+        required: [slug, verdict, comments]
+
+    - name: list_reviews
+      description: List all reviews on a document (returns summaries; use get_document full for bodies).
+      tool: ./tools/list-reviews.mjs
+      parameters:
+        type: object
+        properties:
+          slug: { type: string }
+          cwd:  { type: string }
+        required: [slug]
+
+    # ── Patent state tools ──────────────────────────────────────────
+    - name: set_patent_metadata
+      description: >
+        Set doc.patent.{type, priority_date, inventors}. Only applies
+        when kind === "patent_application".
+      tool: ./tools/set-patent-metadata.mjs
+      parameters:
+        type: object
+        properties:
+          slug:          { type: string }
+          type:          { type: string, enum: [utility, provisional, design, plant] }
+          priority_date: { type: string, description: "ISO date YYYY-MM-DD or null" }
+          inventors:     { type: array, items: { type: object }, description: "[{name, address?}]" }
+          cwd:           { type: string }
+        required: [slug]
+
+    - name: add_claim_tree_item
+      description: >
+        Append an independent or dependent claim to doc.patent.claims_tree.
+        Dependent claims require depends_on (id of the parent claim).
+      tool: ./tools/add-claim-tree-item.mjs
+      parameters:
+        type: object
+        properties:
+          slug:       { type: string }
+          text:       { type: string }
+          kind:       { type: string, enum: [independent, dependent] }
+          depends_on: { type: string }
+          id:         { type: string, description: "Auto: next integer as string." }
+          cwd:        { type: string }
+        required: [slug, text]
+
+    - name: update_claim_tree_item
+      description: Narrow / broaden / rewrite an existing patent claim's text (id stable).
+      tool: ./tools/update-claim-tree-item.mjs
+      parameters:
+        type: object
+        properties:
+          slug: { type: string }
+          id:   { type: string }
+          text: { type: string }
+          cwd:  { type: string }
+        required: [slug, id, text]
+
+    - name: add_prior_art
+      description: Register a reference from doc.references as prior art on the patent application.
+      tool: ./tools/add-prior-art.mjs
+      parameters:
+        type: object
+        properties:
+          slug:      { type: string }
+          ref_id:    { type: string }
+          relevance: { type: string, enum: [background, similar, distinguishing] }
+          note:      { type: string }
+          id:        { type: string }
+          cwd:       { type: string }
+        required: [slug, ref_id]
+
+    - name: set_claim_novelty
+      description: >
+        Persist a novelty verdict on a patent claim (novel / similar_to_prior /
+        anticipated / inconclusive). Prior Art Agent derives verdict via its
+        own gateway; this tool only records it.
+      tool: ./tools/set-claim-novelty.mjs
+      parameters:
+        type: object
+        properties:
+          slug:           { type: string }
+          claim_id:       { type: string }
+          verdict:        { type: string, enum: [novel, similar_to_prior, anticipated, inconclusive] }
+          prior_art_refs: { type: array, items: { type: string } }
+          reason:         { type: string }
+          cwd:            { type: string }
+        required: [slug, claim_id, verdict]
+
+    - name: check_claim_hierarchy
+      description: >
+        Validate patent claims_tree — reports orphans, cycles, depth,
+        and independents/dependents counts.
+      tool: ./tools/check-claim-hierarchy.mjs
+      parameters:
+        type: object
+        properties:
+          slug: { type: string }
+          cwd:  { type: string }
+        required: [slug]
+
   workspace: ./config/workspace.yaml
   agents_from: ./config/agents/
 
@@ -415,3 +681,12 @@ config:
     - type: panel
       name: Research Studio
       source: ./workspace/studio.html
+    - type: panel
+      name: References
+      source: ./workspace/references.html
+    - type: panel
+      name: Sources
+      source: ./workspace/sources.html
+    - type: panel
+      name: Compilations
+      source: ./workspace/compile.html

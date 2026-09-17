@@ -14,13 +14,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { loadDocument, docPaths, appendEvent, nowIso } from './lib.mjs';
-import { compileMarkdown, compileLatex } from './document-compile.mjs';
+import { compileMarkdown, compileLatex, compileUsptoXml } from './document-compile.mjs';
+
+const VALID_TARGETS = new Set(['md', 'tex', 'pdf', 'docx', 'uspto_xml']);
 
 export async function call(args = {}, options = {}) {
   const { slug, target, allow_unsupported_claims = false, cwd } = args;
   if (!slug || !target) return { success: false, output: '`slug` and `target` required.' };
-  if (!['md', 'tex', 'pdf'].includes(target)) {
-    return { success: false, output: `\`target\` must be one of: md, tex, pdf` };
+  if (!VALID_TARGETS.has(target)) {
+    return { success: false, output: `\`target\` must be one of: ${[...VALID_TARGETS].join(', ')}` };
   }
 
   const doc = loadDocument(slug, cwd);
@@ -58,25 +60,40 @@ export async function call(args = {}, options = {}) {
     return { success: true, output: { slug, target: 'tex', output_path: outPath, bytes: tex.length } };
   }
 
-  if (target === 'pdf') {
-    // Compile via pandoc; input = document.md (already in sync).
-    const outPath = path.join(paths.exports, 'document.pdf');
+  if (target === 'pdf' || target === 'docx') {
+    // Both go through pandoc. PDF path additionally benefits from pdflatex.
+    const outFile = `document.${target}`;
+    const outPath = path.join(paths.exports, outFile);
     fs.mkdirSync(paths.exports, { recursive: true });
     const which = spawnSync('which', ['pandoc'], { encoding: 'utf-8' });
     if (which.status !== 0) {
-      const msg = 'pandoc not found on PATH — install pandoc (and pdflatex) to compile PDF, or use target: "tex".';
-      recordCompile(state, slug, 'pdf', outPath, 'skipped', msg);
+      const msg = `pandoc not found on PATH — install pandoc to compile ${target}, or use target: "md" / "tex".`;
+      recordCompile(state, slug, target, outPath, 'skipped', msg);
       return { success: false, output: msg };
     }
     const bibArg = fs.existsSync(paths.bib) ? ['--bibliography', paths.bib] : [];
     const result = spawnSync('pandoc', [paths.md, '-o', outPath, ...bibArg, '--citeproc'], { encoding: 'utf-8' });
     if (result.status !== 0) {
       const errTail = (result.stderr || '').split('\n').slice(-8).join('\n');
-      recordCompile(state, slug, 'pdf', outPath, 'error', errTail);
-      return { success: false, output: { message: 'pandoc failed', stderr: errTail } };
+      recordCompile(state, slug, target, outPath, 'error', errTail);
+      return { success: false, output: { message: `pandoc failed for ${target}`, stderr: errTail } };
     }
-    recordCompile(state, slug, 'pdf', outPath, 'ok', 'compiled via pandoc');
-    return { success: true, output: { slug, target: 'pdf', output_path: outPath } };
+    recordCompile(state, slug, target, outPath, 'ok', `compiled via pandoc`);
+    return { success: true, output: { slug, target, output_path: outPath } };
+  }
+
+  if (target === 'uspto_xml') {
+    if (doc.kind !== 'patent_application') {
+      const msg = `uspto_xml target requires kind: "patent_application" (this document is "${doc.kind}").`;
+      recordCompile(state, slug, target, '', 'skipped', msg);
+      return { success: false, output: msg };
+    }
+    const xml = compileUsptoXml(doc);
+    const outPath = path.join(paths.exports, 'document.xml');
+    fs.mkdirSync(paths.exports, { recursive: true });
+    fs.writeFileSync(outPath, xml, 'utf-8');
+    recordCompile(state, slug, target, outPath, 'ok', `${xml.length} bytes`);
+    return { success: true, output: { slug, target: 'uspto_xml', output_path: outPath, bytes: xml.length } };
   }
 
   return { success: false, output: `Unreachable: unknown target "${target}"` };

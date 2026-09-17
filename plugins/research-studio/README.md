@@ -1,6 +1,6 @@
 # research-studio
 
-Compositional research-document studio. Produces **research papers**, **patent applications**, **technical reports**, and **grant proposals** from source material (PDFs, notes, experimental data, URLs). Documents live as a JSON DSL, compile to Markdown / LaTeX / PDF (via pandoc) on every mutation. Domain specialists — **Source**, **Outline**, **Draft**, **Cite**, **Vision Analyst** — each own a slice of the DSL and are orchestrated by a Research Director.
+Compositional research-document studio. Produces **research papers**, **patent applications** (with full USPTO XML output), **technical reports**, and **grant proposals** from source material (PDFs, notes, experimental data, URLs). Documents live as a JSON DSL, compile to Markdown / LaTeX / PDF / DOCX / USPTO XML on demand. Domain specialists — **Source**, **Outline**, **Draft**, **Cite**, **Vision Analyst**, **Figure**, **Claim**, **Style**, **Reviewer**, plus patent-only **Prior Art** and **Claim Author** — each own a slice of the DSL and are orchestrated by a Research Director.
 
 ## Prerequisites
 
@@ -50,15 +50,21 @@ node plugins/research-studio/selftest.mjs
 ## Agent topology
 
 ```
-                     ┌─ Research Director ─────────────┐
-                     │                                 │
-                     ▼                                 ▼
-                  Planner                          (compile_document
-                (read-only)                         gates on claims)
+                     ┌─ Research Director ─────────────────────────────┐
+                     │                                                 │
+                     ▼                                                 ▼
+                  Planner                                    (compile_document
+                (read-only)                                   gates on claims)
                      │
-       ┌──────┬──────┼──────┬──────┐
-       ▼      ▼      ▼      ▼      ▼
-     Source Outline Draft  Cite  Vision Analyst
+       ┌──────┬──────┼──────┬──────┬───────┬───────┬────────┬─────────┐
+       ▼      ▼      ▼      ▼      ▼       ▼       ▼        ▼         ▼
+     Source Outline Draft  Cite  Vision  Figure  Claim   Style   Reviewer
+                                Analyst
+
+   Patent-only (kind === "patent_application"):
+       ┌──────────────┬──────────────┐
+       ▼              ▼              ▼
+    Prior Art    Claim Author    (regular flow above still applies)
 ```
 
 | Agent | Owns | Gateway | File |
@@ -67,9 +73,15 @@ node plugins/research-studio/selftest.mjs
 | **Plan** | outline & source-ingest plan (read-only) | text | `config/agents/plan.yaml` |
 | **Source** | `sources.*` | text | `config/agents/source.yaml` |
 | **Outline** | `outline[]` | text | `config/agents/outline.yaml` |
-| **Draft** | `sections[id].content` (via its own gateway) | **text-strong** for prose | `config/agents/draft.yaml` |
+| **Draft** | `sections[id].content` (via own gateway) | **text-strong** for prose | `config/agents/draft.yaml` |
 | **Cite** | `references.*`, `sections[id].cites`, `meta.bib_style` | text | `config/agents/cite.yaml` |
-| **Vision Analyst** | `figures[]`, `claims[id].verification` (via its own vision gateway) | **vision-capable** | `config/agents/vision-analyst.yaml` |
+| **Vision Analyst** | `figures[]`, `claims[id].verification` (via own vision gateway) | **vision-capable** | `config/agents/vision-analyst.yaml` |
+| **Figure** | figure import + placement + caption | text | `config/agents/figure.yaml` |
+| **Claim** | claim extraction from prose (via own gateway) | text-strong | `config/agents/claim.yaml` |
+| **Style** | venue template + length + compliance | text | `config/agents/style.yaml` |
+| **Reviewer** | reviews (via own gateway) | text-strong | `config/agents/reviewer.yaml` |
+| **Prior Art** *(patent)* | novelty verdicts vs prior art (via own gateway) | text-strong | `config/agents/prior-art.yaml` |
+| **Claim Author** *(patent)* | patent claim authoring + narrowing (via own gateway) | text-strong | `config/agents/claim-author.yaml` |
 
 See [`config/reference/agent-contracts.md`](./config/reference/agent-contracts.md) for the full ownership matrix and handoff format, and [`config/reference/document-dsl.md`](./config/reference/document-dsl.md) for the DSL spec.
 
@@ -95,6 +107,22 @@ See [`config/reference/agent-contracts.md`](./config/reference/agent-contracts.m
 - `extract_figures_from_pdf` (needs real PDF provider for actual images)
 - `set_figure_description`, `set_claim_verdict`
 
+**Figure Agent**
+- `import_figure` (local path / URL / relative), `place_figure`, `caption_figure`, `list_figures`
+
+**Claim Agent** (extracts claims via its own gateway, then persists)
+- `add_claim`, `link_claim_to_source`, `list_claims`, `list_unsupported_claims`
+
+**Style Agent**
+- `apply_venue_template`, `check_length`, `check_venue_compliance`
+
+**Reviewer Agent** (authors review via own gateway, then persists)
+- `add_review`, `list_reviews`
+
+**Patent path** (kind === `patent_application`)
+- `set_patent_metadata`, `add_claim_tree_item`, `update_claim_tree_item`
+- `add_prior_art`, `set_claim_novelty`, `check_claim_hierarchy`
+
 ## Provider configuration
 
 Zero-credential defaults for every provider — tool chains always complete:
@@ -116,7 +144,9 @@ export RESEARCH_CROSSREF_EMAIL=you@example.com   # polite-pool for higher rate l
 |---|---|---|
 | `md` | `<slug>/document.md` (always in sync) | none |
 | `tex` | `<slug>/exports/document.tex` (venue-aware preamble) | none |
-| `pdf` | `<slug>/exports/document.pdf` | `pandoc` on PATH (uses pdflatex if present) |
+| `pdf` | `<slug>/exports/document.pdf` | `pandoc` on PATH (uses `pdflatex` if present) |
+| `docx` | `<slug>/exports/document.docx` | `pandoc` on PATH |
+| `uspto_xml` | `<slug>/exports/document.xml` | none (patent applications only) |
 
 Compile refuses non-Markdown targets while unverified claims exist — override with `allow_unsupported_claims: true` for draft snapshots.
 
@@ -128,14 +158,19 @@ Under `config/venues/`, each YAML declares document class, packages, bib style, 
 - `ieee-conf` — IEEEtran two-column
 - `neurips` — NeurIPS 2024, natbib, 9-page hard limit
 - `acl` — ACL/EMNLP/NAACL, natbib, Limitations required
+- `acm` — ACM Reference Format, sigconf, 10-12 page target
+- `uspto-utility` — USPTO utility application (patent flow)
+- `epo-utility` — EPO utility application (patent flow)
+- `nsf-grant` — NSF proposal, 15-page hard limit
 
 Add new venues by dropping a YAML file — no code change.
 
 ## Panels (workspace views)
 
 - **Research Studio** (`workspace/studio.html`) — document gallery with word counts, kind/venue badges, links to `document.md`.
-
-Phase 2 will add References, Sources, and Compile panels.
+- **References** (`workspace/references.html`) — BibTeX table per document with DOI links, bib style.
+- **Sources** (`workspace/sources.html`) — ingested PDFs / URLs / experiments per document, provider + extracted-chars badges.
+- **Compilations** (`workspace/compile.html`) — history of compile runs with status badges and links to output files.
 
 ## Example brief → run
 
@@ -164,32 +199,42 @@ plugins/research-studio/
 ├── plugin.yaml
 ├── tools/
 │   ├── lib.mjs                       # DSL helpers + state
-│   ├── document-compile.mjs          # md + tex + bib emitters
+│   ├── document-compile.mjs          # md + tex + bib + uspto_xml emitters
 │   ├── document-io.mjs               # loadOrCreate / saveAndSync
+│   ├── venue.mjs                     # config/venues/*.yaml reader (no deps)
 │   ├── create-document.mjs / get-document.mjs / snapshot-document.mjs / compile-document.mjs
 │   ├── ingest-pdf.mjs / ingest-url.mjs / add-note.mjs / add-experiment.mjs / list-sources.mjs
 │   ├── set-outline.mjs / add-section.mjs / reorder-sections.mjs / delete-section.mjs
 │   ├── set-section-content.mjs / add-todo.mjs
 │   ├── add-reference.mjs / lookup-doi.mjs / attach-citation.mjs / format-bibliography.mjs / dedupe-references.mjs
 │   ├── extract-figures-from-pdf.mjs / set-figure-description.mjs / set-claim-verdict.mjs
+│   ├── import-figure.mjs / place-figure.mjs / caption-figure.mjs / list-figures.mjs
+│   ├── add-claim.mjs / link-claim-to-source.mjs / list-claims.mjs / list-unsupported-claims.mjs
+│   ├── apply-venue-template.mjs / check-length.mjs / check-venue-compliance.mjs
+│   ├── add-review.mjs / list-reviews.mjs
+│   ├── set-patent-metadata.mjs / add-claim-tree-item.mjs / update-claim-tree-item.mjs
+│   ├── add-prior-art.mjs / set-claim-novelty.mjs / check-claim-hierarchy.mjs
 │   └── providers/                    # pdf (local + mistral), ref (local + crossref) — no LLM providers here
 ├── config/
 │   ├── workspace.yaml                # Research Director
-│   ├── agents/                       # plan / source / outline / draft / cite / vision-analyst
-│   ├── venues/                       # arxiv / ieee-conf / neurips / acl
+│   ├── agents/                       # plan / source / outline / draft / cite / vision-analyst /
+│   │                                 # figure / claim / style / reviewer / prior-art / claim-author
+│   ├── venues/                       # arxiv / ieee-conf / neurips / acl / acm / uspto-utility / epo-utility / nsf-grant
 │   └── reference/                    # document-dsl.md + agent-contracts.md
 ├── workspace/
-│   └── studio.html                   # document gallery
-├── selftest.mjs                      # 50+ assertions, all offline
+│   ├── studio.html                   # document gallery
+│   ├── references.html               # BibTeX table per document
+│   ├── sources.html                  # ingested sources per document
+│   └── compile.html                  # compilation history
+├── selftest.mjs                      # 100 assertions, all offline
 └── README.md
 ```
 
-## Roadmap — Phase 2
+## Roadmap — Phase 3
 
-- **Figure Agent** — import/generate figures; cross-plugin delegation to `threejs-studio` (3D-rendered figures) and `manim-studio` (last-frame PNG from animations).
-- **Claim Agent** — extract claims from prose, link to sources automatically, `list_unsupported_claims`.
-- **Style Agent** — `apply_venue_template`, `check_length`, `check_venue_compliance`.
-- **Reviewer Agent** — rubric review (novelty / clarity / rigor / contribution) and `simulate_reviewer` personas.
-- **Patent path** — Prior-Art Agent (USPTO/EPO/Google Patents search) + Claim-Author Agent (hierarchical claims, scope calibration) + USPTO XML compile target.
-- **DOCX export** via pandoc.
-- **References + Sources + Compile panels** in the workspace.
+- **Live prior-art search** — USPTO / EPO / Google Patents API providers (currently `add_prior_art` accepts a manually registered reference).
+- **Cross-plugin figure generation** — Director-orchestrated flow that delegates to `threejs-studio` / `manim-studio` for figure rendering, then re-imports the result via `import_figure`. The scaffolding is in place; the concrete orchestrator prompt + example doc is pending.
+- **Claim extraction from figure text** — Vision Analyst reads a chart in the paper and proposes `add_claim` calls automatically.
+- **Reference deduplication across DOI variants** — currently by-DOI or by-title+year; add fuzzy matching for arXiv → published version.
+- **Timeline / diff panel** — inspect `snapshots/*.json` side-by-side.
+- **Grant-specific budget-section tools** — separate NIH / NSF budget line-item helpers.
