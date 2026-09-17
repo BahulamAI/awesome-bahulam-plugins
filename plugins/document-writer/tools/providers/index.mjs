@@ -1,5 +1,5 @@
 /**
- * Provider adapter dispatcher for research-studio.
+ * Provider adapter dispatcher for document-writer.
  *
  * Only structured-data providers live here (PDF extraction, reference
  * metadata lookup). LLM-driven work — drafting prose, describing

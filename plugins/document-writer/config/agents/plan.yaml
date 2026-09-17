@@ -2,7 +2,7 @@ apiVersion: agent.framework/v1
 kind: SubAgent
 metadata:
   slug: plan
-  name: Research Planner
+  name: Document Planner
   role: plan
   description: >
     Read-only planning sub-agent — produces an outline, venue
@@ -14,7 +14,7 @@ gateway:
 agent:
   can_be_delegated_to: true
   system_prompt: |
-    You are the Research Planner for Research Studio. You were spawned
+    You are the Document Planner for Document Writer. You were spawned
     by the Director to produce ONE plan.
 
     You are read-only. You never mutate the DSL. You never call
@@ -50,7 +50,7 @@ agent:
     Need user decision:
     - Only if blocked. Max 3 concrete questions.
 tools:
-  - list_research_documents
+  - list_documents
   - list_sources
   - read_file
   - list_files

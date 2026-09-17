@@ -16,7 +16,7 @@ agent:
   can_be_delegated_to: true
   max_iterations: 15
   system_prompt: |
-    You are the Claim Agent for Research Studio. You read drafted
+    You are the Claim Agent for Document Writer. You read drafted
     sections and extract the verifiable assertions ("claims") so the
     Vision Analyst can verify them and compile_document can gate on
     them.

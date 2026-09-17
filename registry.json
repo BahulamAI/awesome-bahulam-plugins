@@ -29,6 +29,15 @@
       "tags": ["showcase", "content", "image", "video", "threejs", "manim", "async", "orchestration"]
     },
     {
+      "name": "document-writer",
+      "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
+      "ref": "main",
+      "subdir": "plugins/document-writer",
+      "description": "Compositional document writer for research papers, patent applications (with USPTO XML output), technical reports, grant proposals, and literature reviews. Documents live as a JSON DSL; document.md and refs.bib are always kept in sync. Domain specialists (Source / Outline / Draft / Cite / Vision Analyst / Figure / Claim / Style / Reviewer, plus patent-only Prior Art and Claim Author) each own a slice of the DSL. Every claim traces to a source; compile refuses to emit final targets while unverified claims exist. Compile to md / tex / pdf / docx / uspto_xml. Watermark support (DRAFT / CONFIDENTIAL / auto-DRAFT when unverified claims exist) renders across every target. Zero-credential local providers for PDF text extract and reference lookup; upgrade paths for Mistral OCR and Crossref.",
+      "author": "BahulamAI",
+      "tags": ["document", "writing", "paper", "patent", "grant", "report", "citation", "bibtex", "latex", "pandoc", "dsl", "vision", "watermark"]
+    },
+    {
       "name": "hello-mcp",
       "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
       "ref": "main",
@@ -54,15 +63,6 @@
       "description": "Standalone Manim animation studio for text-to-video explainers with render state, background jobs, review, and a live gallery",
       "author": "BahulamAI",
       "tags": ["animation", "video", "manim", "async", "education", "explainer"]
-    },
-    {
-      "name": "research-studio",
-      "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
-      "ref": "main",
-      "subdir": "plugins/research-studio",
-      "description": "Compositional research-document studio for papers, patents (with USPTO XML output), technical reports, and grants. Documents stored as a JSON DSL; document.md and refs.bib always kept in sync. Domain specialists (Source / Outline / Draft / Cite / Vision Analyst / Figure / Claim / Style / Reviewer, plus patent-only Prior Art and Claim Author) each own a slice of the DSL. Every claim traces to a source; compile refuses to emit final targets while unverified claims exist. Compile to md / tex / pdf / docx / uspto_xml. Zero-credential local providers for PDF text extract and reference lookup; upgrade paths for Mistral OCR and Crossref.",
-      "author": "BahulamAI",
-      "tags": ["research", "paper", "patent", "academia", "citation", "bibtex", "latex", "pandoc", "dsl", "vision"]
     },
     {
       "name": "threejs-studio",

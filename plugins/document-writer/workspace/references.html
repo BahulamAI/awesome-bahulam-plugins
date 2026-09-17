@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Research Studio — Sources</title>
+<title>Document Writer — References</title>
 <style>
-:root{--bg:#0f172a;--fg:#e2e8f0;--muted:#64748b;--brand:#6366f1;--border:#1e293b}
+:root{--bg:#0f172a;--fg:#e2e8f0;--muted:#64748b;--brand:#6366f1;--border:#1e293b;--warn:#eab308;--ok:#22c55e}
 html,body{margin:0;min-height:100%;background:var(--bg);color:var(--fg);font-family:Inter,system-ui,sans-serif;font-size:13px}
 body{display:flex;flex-direction:column;min-height:100vh}
 header{padding:12px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
@@ -13,28 +13,31 @@ h1{margin:0;font-size:14px;font-weight:600}
 select,button{background:#1e293b;color:var(--fg);border:1px solid var(--border);border-radius:5px;padding:4px 8px;font-family:inherit;font-size:12px}
 button{cursor:pointer;margin-left:auto}
 #body{flex:1;padding:14px 18px;overflow-y:auto}
-.card{border:1px solid var(--border);border-radius:6px;padding:10px 14px;margin-bottom:10px;background:#111827}
-.card h3{margin:0 0 4px;font-size:13px;font-weight:600}
-.card .kind{display:inline-block;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:500;background:rgba(99,102,241,.15);color:var(--brand);margin-right:6px}
-.card .meta{color:var(--muted);font-size:11px}
-.card code{color:var(--brand);font-family:ui-monospace,Menlo,monospace;font-size:11px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{text-align:left;padding:6px 10px;border-bottom:2px solid var(--border);color:var(--muted);font-weight:500;font-size:10px;text-transform:uppercase;letter-spacing:.05em}
+td{padding:6px 10px;border-bottom:1px solid rgba(30,41,59,.5);vertical-align:top}
+code{color:var(--brand);font-family:ui-monospace,Menlo,monospace;font-size:11px}
+.badge{display:inline-block;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:500;background:rgba(99,102,241,.15);color:var(--brand)}
 .empty{padding:40px;text-align:center;color:var(--muted)}
 </style>
 </head>
 <body>
 <header>
-  <h1>Sources</h1>
+  <h1>References</h1>
   <select id="doc-picker"></select>
   <button id="refresh">Refresh</button>
 </header>
 <div id="body">
   <div id="empty" class="empty" style="display:none">Pick a document above.</div>
   <div id="stats" style="margin-bottom:10px;color:var(--muted);font-size:11px"></div>
-  <div id="cards"></div>
+  <table id="table">
+    <thead><tr><th>id</th><th>type</th><th>title</th><th>year</th><th>DOI</th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
 </div>
 <script>
 const TOKEN = new URLSearchParams(location.search).get('token') || '';
-const PLUGIN = 'research-studio';
+const PLUGIN = 'document-writer';
 const headers = { 'Content-Type': 'application/json', ...(TOKEN ? { 'X-Bahulam-Local-Token': TOKEN } : {}) };
 let docs = [];
 let currentSlug = null;
@@ -59,29 +62,26 @@ async function fetchDsl(slug) {
   } catch { return null; }
 }
 
-function renderSources(dsl) {
-  const cards = document.getElementById('cards');
+function renderRefs(dsl) {
+  const rows = document.getElementById('rows');
   const stats = document.getElementById('stats');
   const empty = document.getElementById('empty');
-  if (!dsl) { cards.innerHTML = ''; stats.textContent = ''; empty.style.display = ''; return; }
+  if (!dsl) { rows.innerHTML = ''; stats.textContent = ''; empty.style.display = ''; return; }
   empty.style.display = 'none';
-  const sources = dsl.sources || {};
-  const entries = Object.entries(sources);
-  const byKind = { pdf: 0, url: 0, note: 0, experiment: 0 };
-  for (const [, s] of entries) if (byKind[s.kind] != null) byKind[s.kind]++;
-  stats.textContent = `${entries.length} source${entries.length === 1 ? '' : 's'} · pdf=${byKind.pdf} url=${byKind.url} experiment=${byKind.experiment}`;
-  cards.innerHTML = entries.map(([id, s]) => `
-    <div class="card">
-      <h3><span class="kind">${s.kind || ''}</span>${id}</h3>
-      <div class="meta">
-        ${s.path ? `<div>path: <code>${s.path}</code></div>` : ''}
-        ${s.url ? `<div>url: <a href="${s.url}" target="_blank">${s.url}</a></div>` : ''}
-        ${s.provider ? `<div>provider: ${s.provider}</div>` : ''}
-        ${s.extracted_chars != null ? `<div>extracted chars: ${s.extracted_chars}</div>` : ''}
-        ${s.ref_id ? `<div>linked to reference: <code>${s.ref_id}</code></div>` : ''}
-        ${s.description ? `<div>description: ${s.description}</div>` : ''}
-      </div>
-    </div>`).join('');
+  const refs = dsl.references || {};
+  const entries = Object.entries(refs);
+  stats.textContent = `${entries.length} reference${entries.length === 1 ? '' : 's'} · bib style: ${dsl.meta?.bib_style || '(default)'}`;
+  rows.innerHTML = entries.map(([id, r]) => {
+    const f = r.fields || {};
+    const title = f.title || '';
+    return `<tr>
+      <td><code>${id}</code></td>
+      <td><span class="badge">${r.type || 'misc'}</span></td>
+      <td>${title}</td>
+      <td>${f.year || ''}</td>
+      <td>${f.doi ? `<a href="https://doi.org/${f.doi}" target="_blank">${f.doi}</a>` : ''}</td>
+    </tr>`;
+  }).join('');
 }
 
 async function refresh() {
@@ -94,15 +94,15 @@ async function refresh() {
   if (prev && docs.some(r => (r.slug || r.name) === prev)) {
     picker.value = prev;
     currentSlug = prev;
-    renderSources(await fetchDsl(prev));
+    renderRefs(await fetchDsl(prev));
   } else {
-    renderSources(null);
+    renderRefs(null);
   }
 }
 
 document.getElementById('doc-picker').addEventListener('change', async (e) => {
   currentSlug = e.target.value;
-  renderSources(await fetchDsl(currentSlug));
+  renderRefs(await fetchDsl(currentSlug));
 });
 document.getElementById('refresh').addEventListener('click', refresh);
 window.addEventListener('message', (e) => { if (e.data?.type === 'plugin_state_changed') refresh(); });

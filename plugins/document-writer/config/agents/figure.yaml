@@ -17,7 +17,7 @@ agent:
   can_be_delegated_to: true
   max_iterations: 10
   system_prompt: |
-    You are the Figure Agent for Research Studio. You manage figures on
+    You are the Figure Agent for Document Writer. You manage figures on
     the document: their file, caption, placement, and which sections
     reference them.
 

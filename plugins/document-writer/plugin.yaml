@@ -1,19 +1,20 @@
 apiVersion: bahulam.plugin/1
 kind: Plugin
 metadata:
-  name: research-studio
-  version: 0.2.0
+  name: document-writer
+  version: 0.2.1
   description: >
-    Compositional research-document studio. Produces research papers,
-    patent applications, technical reports, and grant proposals from
-    source material (PDFs, notes, experiments, URLs) with claim
-    verification and venue-specific formatting. Documents are stored
-    as a JSON DSL and compiled to Markdown / LaTeX / PDF / DOCX / USPTO
-    XML on demand. Vision-capable agents describe and cross-check
-    figures. Domain specialists (Source, Outline, Draft, Cite, Vision,
-    Figure, Claim, Style, Reviewer, plus patent-only Prior Art and
-    Claim Author) each own a slice of the DSL and are orchestrated by
-    a Research Director.
+    Compositional document writer. Produces research papers, patent
+    applications, technical reports, grant proposals, and literature
+    reviews from source material (PDFs, notes, experiments, URLs) with
+    claim verification and venue-specific formatting. Documents are
+    stored as a JSON DSL and compiled to Markdown / LaTeX / PDF / DOCX /
+    USPTO XML on demand. Vision-capable agents describe and cross-check
+    figures. Watermark support (DRAFT / CONFIDENTIAL / auto-DRAFT when
+    unverified claims exist) renders across every target. Domain
+    specialists (Source, Outline, Draft, Cite, Vision, Figure, Claim,
+    Style, Reviewer, plus patent-only Prior Art and Claim Author) each
+    own a slice of the DSL and are orchestrated by a Document Director.
   author: BahulamAI
   repository: https://github.com/BahulamAI/awesome-bahulam-plugins
 
@@ -25,7 +26,7 @@ config:
 
   state:
     tables:
-      - name: research_documents
+      - name: documents
         columns:
           - { name: id, type: INTEGER, primary: true, autoincrement: true }
           - { name: slug, type: TEXT, not_null: true }
@@ -42,7 +43,7 @@ config:
           - { columns: [slug] }
           - { columns: [status] }
 
-      - name: research_compilations
+      - name: compilations
         columns:
           - { name: id, type: INTEGER, primary: true, autoincrement: true }
           - { name: slug, type: TEXT, not_null: true }
@@ -59,16 +60,16 @@ config:
       - { stream: documents, limit: 5 }
 
     context_tools:
-      - name: list_research_documents
-        table: research_documents
-        description: List saved research documents with status, path, and word count.
+      - name: list_documents
+        table: documents
+        description: List saved documents with status, path, and word count.
         parameters:
           type: object
           properties:
             limit: { type: integer }
 
-      - name: list_research_compilations
-        table: research_compilations
+      - name: list_compilations
+        table: compilations
         description: List compilation outcomes by document.
         parameters:
           type: object
@@ -82,7 +83,7 @@ config:
     # ── Document lifecycle ──────────────────────────────────────────
     - name: create_document
       description: >
-        Initialize a new research document with an empty outline, empty
+        Initialize a new document with an empty outline, empty
         references, and a compiled document.md.
       tool: ./tools/create-document.mjs
       parameters:
@@ -698,7 +699,7 @@ config:
 
   views:
     - type: panel
-      name: Research Studio
+      name: Document Writer
       source: ./workspace/studio.html
     - type: panel
       name: References

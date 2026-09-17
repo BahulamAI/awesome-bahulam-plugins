@@ -1,5 +1,5 @@
 /**
- * Shared utility helpers for research-studio tools.
+ * Shared utility helpers for document-writer tools.
  *
  * Two responsibilities:
  *   1. Durable state helpers (SQLite + append streams).
@@ -239,17 +239,17 @@ export function upsertDocumentRow(state, { slug, title, kind, venue, dslPath, md
   if (!hasSqlState(state)) return;
   const now = nowIso();
   try {
-    const existing = state.query('SELECT id FROM research_documents WHERE slug = ?', [slug]) || [];
+    const existing = state.query('SELECT id FROM documents WHERE slug = ?', [slug]) || [];
     if (existing.length) {
       state.query(
-        `UPDATE research_documents
+        `UPDATE documents
            SET title = ?, kind = ?, venue = ?, dsl_path = ?, md_path = ?, status = ?, word_count = ?, updated_at = ?
          WHERE slug = ?`,
         [title, kind, venue, dslPath, mdPath, status, wordCount, now, slug],
       );
     } else {
       state.query(
-        `INSERT INTO research_documents
+        `INSERT INTO documents
            (slug, title, kind, venue, dsl_path, md_path, status, word_count, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [slug, title, kind, venue, dslPath, mdPath, status, wordCount, now, now],

@@ -1,17 +1,18 @@
 apiVersion: agent.framework/v1
 kind: SingleAgent
 metadata:
-  slug: research-studio
-  name: Research Director
+  slug: document-writer
+  name: Document Director
   aliases:
     - director
-    - research-director
+    - document-director
+    - research-director   # legacy alias — keep so existing sessions/routines resolve
   role: interactive_director
   description: >
-    Orchestrator for Research Studio. Talks to the user, plans, delegates
+    Orchestrator for Document Writer. Talks to the user, plans, delegates
     domain work (source / outline / draft / cite / vision), and drives
     the compile pipeline to produce research papers, patent applications,
-    technical reports, and grant proposals.
+    technical reports, grant proposals, and literature reviews.
 gateway:
   type: OpenRouterV2Gateway
   config:
@@ -21,10 +22,10 @@ agent:
   can_delegate: true
   can_be_delegated_to: false
   system_prompt: |
-    You are the Research Director for Research Studio. You take briefs
+    You are the Document Director for Document Writer. You take briefs
     from users ("write a NeurIPS paper on X from these PDFs", "draft a
     provisional patent on Y with these notes") and coordinate specialist
-    sub-agents to deliver a finished research document.
+    sub-agents to deliver a finished document.
 
     Your job is orchestration and user-facing communication — NOT prose
     writing and NOT direct DSL mutation.
@@ -60,7 +61,7 @@ agent:
                         narrows them per Prior Art verdicts.
 
     ── Standard workflow ────────────────────────────────────────────────
-    0. SCAN. list_research_documents — if the brief resembles prior work,
+    0. SCAN. list_documents — if the brief resembles prior work,
        offer to iterate on that slug.
 
     1. TALK. Clarify: kind (paper/patent/report/grant/review), venue
@@ -121,8 +122,8 @@ tools:
   - delegate
   - create_document
   - get_document
-  - list_research_documents
-  - list_research_compilations
+  - list_documents
+  - list_compilations
   - compile_document
   - snapshot_document
   - read_file

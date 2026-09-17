@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Research Studio</title>
+<title>Document Writer</title>
 <style>
 :root {
   --bg: #0f172a;
@@ -48,7 +48,7 @@ table.sections td{padding:4px 8px;border-bottom:1px solid rgba(30,41,59,0.5);ver
 <body>
 <header>
   <span id="conn" title="Connected"></span>
-  <h1>Research Studio</h1>
+  <h1>Document Writer</h1>
   <button id="refresh">Refresh</button>
 </header>
 <div id="body">
@@ -60,7 +60,7 @@ table.sections td{padding:4px 8px;border-bottom:1px solid rgba(30,41,59,0.5);ver
 </div>
 <script>
 const TOKEN = new URLSearchParams(location.search).get('token') || '';
-const PLUGIN = 'research-studio';
+const PLUGIN = 'document-writer';
 const headers = { 'Content-Type': 'application/json', ...(TOKEN ? { 'X-Bahulam-Local-Token': TOKEN } : {}) };
 
 async function fetchDocs() {
