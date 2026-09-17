@@ -125,6 +125,25 @@ claims exist unless `allow_unsupported_claims: true`.
 Phase 2 completes the patent-only flow (Prior-Art + Claim-Author agents,
 USPTO XML compile target).
 
+## Watermark
+
+`meta.watermark` marks the compiled output as DRAFT / CONFIDENTIAL /
+etc. The compiler emits it into every target: Markdown blockquote,
+LaTeX `draftwatermark` package, USPTO XML `us-publication-status`
+element.
+
+Three states the compiler distinguishes:
+
+| `meta.watermark` value | Compiler behavior |
+|---|---|
+| absent (never set)         | **Auto-DRAFT** if `list_unsupported_claims.count > 0`; otherwise no watermark |
+| `null` (explicit opt-out)  | No watermark, ever — even with unverified claims |
+| `{text, opacity?, angle?, color?}` | Emitted as-is on every compile |
+
+Set via `set_watermark(slug, text, opacity?, angle?, color?)`. Pass
+`text: null` (or `""`) to clear + opt out of auto-DRAFT. Owned by the
+**Style Agent**.
+
 ## Version + migration
 
 DSL `version` field is `1`. Compilers tolerate unknown fields (forward-

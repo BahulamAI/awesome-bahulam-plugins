@@ -22,7 +22,7 @@ files.
 | Figure extraction (PDF), description, claim verification | **Vision Analyst** | `figures[]` (add), `figures[id].{description,caption}`, `claims[id].verification`, `claims[id].verified` |
 | Figure import + placement + caption | **Figure** | `figures[]` (add/edit `caption`/`placement`/`referenced_in`), `sections[id].figures` |
 | Claim extraction from prose | **Claim** | `claims[]`, `sections[id].claims` |
-| Venue template + compliance | **Style** | `venue`, `meta.bib_style`, `outline[]` (appends missing required sections), `meta.venue_pack` |
+| Venue template + compliance + watermark | **Style** | `venue`, `meta.bib_style`, `outline[]` (appends missing required sections), `meta.venue_pack`, `meta.watermark` |
 | Review authoring | **Reviewer** | `reviews[]` |
 | Cross-plugin figure gen (delegate ask) | **Figure** requests, Director delegates | `figures[]` (add via import_figure after generation) |
 | Outline/plan proposals | **Plan** (read-only) | — |
@@ -107,6 +107,8 @@ forwarded. So the handoff must be self-contained.
 | "List every unsupported claim in the paper" | Claim (`list_unsupported_claims`) |
 | "Extract quantitative claims from Results" | Claim |
 | "Check we're within the NeurIPS 9-page limit" | Style (`check_length` + `check_venue_compliance`) |
+| "Mark this DRAFT until claims are verified" | Style (`set_watermark`) — or leave unset, auto-DRAFT kicks in |
+| "Stop stamping DRAFT even though claims are unverified" | Style (`set_watermark(text: null)`) |
 | "Give me a harsh_academic review of the draft" | Reviewer |
 | "Compile to PDF" / "DOCX" / "USPTO XML" | Director (`compile_document`) |
 | "Merge duplicate references" | Cite (`dedupe_references`) |

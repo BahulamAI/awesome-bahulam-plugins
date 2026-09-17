@@ -557,6 +557,25 @@ config:
           cwd:  { type: string }
         required: [slug]
 
+    - name: set_watermark
+      description: >
+        Set or clear the document's watermark (DRAFT, CONFIDENTIAL, etc.).
+        Applied by every compile target — Markdown banner, LaTeX
+        draftwatermark package, USPTO XML publication-status element.
+        Pass text:null (or empty "") to explicitly opt out — otherwise
+        the compiler auto-applies DRAFT when unverified claims exist.
+      tool: ./tools/set-watermark.mjs
+      parameters:
+        type: object
+        properties:
+          slug:    { type: string }
+          text:    { description: "String label OR null to clear." }
+          opacity: { type: number, description: "0-1 (default 0.15)" }
+          angle:   { type: number, description: "Degrees, LaTeX/PDF only (default 45)" }
+          color:   { type: string, description: "CSS color (default #888888)" }
+          cwd:     { type: string }
+        required: [slug]
+
     # ── Reviewer Agent ──────────────────────────────────────────────
     - name: add_review
       description: >

@@ -62,6 +62,7 @@ import { call as checkVenueCompliance } from './tools/check-venue-compliance.mjs
 
 import { call as addReview } from './tools/add-review.mjs';
 import { call as listReviews } from './tools/list-reviews.mjs';
+import { call as setWatermark } from './tools/set-watermark.mjs';
 
 import { call as setPatentMetadata } from './tools/set-patent-metadata.mjs';
 import { call as addClaimTreeItem } from './tools/add-claim-tree-item.mjs';
@@ -493,6 +494,57 @@ const cwd = sandbox;
   // uspto_xml on a non-patent doc should be refused with a clear message
   const wrongKind = await compileDocument({ slug: 'attn', target: 'uspto_xml', allow_unsupported_claims: true, cwd });
   ok('compile uspto_xml refuses non-patent kind', wrongKind.success === false);
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// WATERMARK — set/clear + auto-DRAFT + compile injection into every target
+// ══════════════════════════════════════════════════════════════════════
+
+// Fresh doc so we can test the three watermark states in isolation.
+{
+  await createDocument({ name: 'mark', title: 'Marked Doc', kind: 'research_paper', venue: 'arxiv', cwd }, { state: fakeState });
+
+  // Auto-DRAFT triggers when an unverified claim exists AND meta.watermark is UNSET.
+  const dslPath = path.join(cwd, 'mark', 'document.json');
+  const dsl = JSON.parse(fs.readFileSync(dslPath, 'utf-8'));
+  dsl.claims = [{ id: 'c1', text: 'unverified test claim', section: 'intro', kind: 'qualitative' }];
+  fs.writeFileSync(dslPath, JSON.stringify(dsl, null, 2));
+
+  // Force md re-compile via any state-mutating tool (add_todo works — pure state).
+  await addTodo({ slug: 'mark', text: 'trigger re-compile', cwd }, { state: fakeState });
+  const mdAuto = fs.readFileSync(path.join(cwd, 'mark', 'document.md'), 'utf-8');
+  ok('watermark: auto-DRAFT banner appears when unverified claims present', /Watermark:.*DRAFT.*auto-applied/.test(mdAuto));
+  ok('watermark: auto-DRAFT names the reason', /1 unverified claim/.test(mdAuto));
+
+  // Explicit set — DRAFT clears, CONFIDENTIAL replaces
+  const conf = await setWatermark({ slug: 'mark', text: 'CONFIDENTIAL', opacity: 0.25, angle: 30, color: '#ff0000', cwd }, { state: fakeState });
+  ok('set_watermark accepts a custom text', conf.success && conf.output.watermark.text === 'CONFIDENTIAL');
+  ok('set_watermark rejects out-of-range opacity', (await setWatermark({ slug: 'mark', text: 'x', opacity: 5, cwd })).success === false);
+
+  const mdConf = fs.readFileSync(path.join(cwd, 'mark', 'document.md'), 'utf-8');
+  ok('watermark: explicit banner appears in Markdown', mdConf.includes('CONFIDENTIAL') && !/auto-applied/.test(mdConf));
+
+  const tex = await compileDocument({ slug: 'mark', target: 'tex', allow_unsupported_claims: true, cwd }, { state: fakeState });
+  ok('watermark: LaTeX compile succeeds with watermark', tex.success);
+  const texContent = fs.readFileSync(tex.output.output_path, 'utf-8');
+  ok('watermark: tex includes draftwatermark package', texContent.includes('\\usepackage{draftwatermark}'));
+  ok('watermark: tex sets watermark text', texContent.includes('\\SetWatermarkText{CONFIDENTIAL}'));
+
+  // Explicit clear — text: null → opt-out, auto-DRAFT MUST NOT reappear
+  const cleared = await setWatermark({ slug: 'mark', text: null, cwd }, { state: fakeState });
+  ok('set_watermark clears when text=null', cleared.success && cleared.output.watermark === null);
+
+  await addTodo({ slug: 'mark', text: 'trigger re-compile again', cwd }, { state: fakeState });
+  const mdCleared = fs.readFileSync(path.join(cwd, 'mark', 'document.md'), 'utf-8');
+  ok('watermark: null opt-out survives even with unverified claims', !mdCleared.includes('Watermark:'));
+
+  // USPTO XML watermark path — needs a patent-kind doc
+  await createDocument({ name: 'wat-patent', title: 'Watermarked Patent', kind: 'patent_application', venue: 'uspto-utility', cwd }, { state: fakeState });
+  await setWatermark({ slug: 'wat-patent', text: 'DRAFT', cwd }, { state: fakeState });
+  const patXml = await compileDocument({ slug: 'wat-patent', target: 'uspto_xml', allow_unsupported_claims: true, cwd }, { state: fakeState });
+  ok('watermark: uspto_xml compile succeeds', patXml.success);
+  const xmlContent = fs.readFileSync(patXml.output.output_path, 'utf-8');
+  ok('watermark: uspto_xml includes us-publication-status', xmlContent.includes('us-publication-status status="DRAFT"'));
 }
 
 // ── Cleanup ─────────────────────────────────────────────────────────────

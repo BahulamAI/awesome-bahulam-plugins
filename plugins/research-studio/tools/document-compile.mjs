@@ -15,9 +15,57 @@ const escapeLatex = (s) => String(s || '')
   .replace(/~/g, '\\textasciitilde{}')
   .replace(/\^/g, '\\textasciicircum{}');
 
+// ── Watermark resolution ────────────────────────────────────────────────
+// Three states (see set-watermark.mjs):
+//   doc.meta.watermark absent    → auto-DRAFT if unverified claims exist
+//   doc.meta.watermark === null  → explicit opt-out, never watermark
+//   doc.meta.watermark: {text,…} → use as-is
+//
+// Returns null when the compiler should emit nothing; otherwise
+// { text, opacity, angle, color, auto } where `auto` distinguishes the
+// user-set case from the auto-DRAFT case (used by callers that want to
+// warn "we auto-marked this as DRAFT").
+function resolveWatermark(doc) {
+  if (doc?.meta?.watermark === null) return null;                       // opt-out
+  if (doc?.meta?.watermark && typeof doc.meta.watermark === 'object') { // explicit
+    const w = doc.meta.watermark;
+    if (!w.text) return null;
+    return {
+      text: String(w.text),
+      opacity: Number.isFinite(+w.opacity) ? +w.opacity : 0.15,
+      angle:   Number.isFinite(+w.angle)   ? +w.angle   : 45,
+      color:   w.color ? String(w.color)   : '#888888',
+      auto: false,
+    };
+  }
+  // Auto-DRAFT: watermark unset AND unsupported claims exist.
+  const unsupported = (doc.claims || []).filter(c => c.verified !== true).length;
+  if (unsupported > 0) {
+    return {
+      text: 'DRAFT',
+      opacity: 0.15,
+      angle: 45,
+      color: '#888888',
+      auto: true,
+      auto_reason: `${unsupported} unverified claim(s)`,
+    };
+  }
+  return null;
+}
+
 // ── Markdown ─────────────────────────────────────────────────────────────
 export function compileMarkdown(doc) {
   const lines = [];
+  const wm = resolveWatermark(doc);
+  if (wm) {
+    // Blockquote banner — visible to anyone opening document.md, plus
+    // survives pandoc's docx conversion (blockquotes are respected).
+    const note = wm.auto
+      ? `⚠ **Watermark:** ${wm.text} — auto-applied (${wm.auto_reason}). Verify all claims or call \`set_watermark({text:null})\` to opt out.`
+      : `⚠ **Watermark:** ${wm.text}`;
+    lines.push(`> ${note}`);
+    lines.push('');
+  }
   lines.push(`# ${doc.title || doc.slug}`);
   lines.push('');
   if (doc.authors?.length) {
@@ -138,6 +186,20 @@ export function compileLatex(doc, venue) {
   const preamble = latexPreamble(v);
   const lines = [];
   lines.push(preamble);
+  const wm = resolveWatermark(doc);
+  if (wm) {
+    // draftwatermark: cross-class-compatible; renders once on every page.
+    // Opacity is 0-1; angle is degrees. Color uses xcolor's HTML syntax.
+    const hex = String(wm.color || '#888888').replace(/^#/, '');
+    lines.push('\\usepackage{draftwatermark}');
+    lines.push('\\usepackage[dvipsnames,table]{xcolor}');
+    lines.push(`\\definecolor{watermarkcolor}{HTML}{${hex}}`);
+    lines.push(`\\SetWatermarkText{${escapeLatex(wm.text)}}`);
+    lines.push(`\\SetWatermarkAngle{${wm.angle}}`);
+    lines.push(`\\SetWatermarkLightness{${(1 - Number(wm.opacity)).toFixed(2)}}`);
+    lines.push('\\SetWatermarkColor{watermarkcolor}');
+    if (wm.auto) lines.push(`% watermark auto-applied: ${wm.auto_reason}`);
+  }
   lines.push('\\begin{document}');
   lines.push(`\\title{${escapeLatex(doc.title || doc.slug)}}`);
   if (doc.authors?.length) {
@@ -263,11 +325,15 @@ export function compileUsptoXml(doc) {
     </us-citation>`;
   }).join('');
 
+  const wm = resolveWatermark(doc);
+  const statusXml = wm ? `
+    <us-publication-status status="${escapeXml(wm.text)}"${wm.auto ? ' auto="true" reason="' + escapeXml(wm.auto_reason || '') + '"' : ''}/>` : '';
+
   return `<?xml version="1.0" encoding="UTF-8"?>
 <us-patent-application lang="EN" type="${escapeXml(patent.type || 'utility')}">
   <us-bibliographic-data-application>
     <invention-title>${escapeXml(doc.title || doc.slug || '')}</invention-title>
-    <priority-date>${escapeXml(patent.priority_date || '')}</priority-date>
+    <priority-date>${escapeXml(patent.priority_date || '')}</priority-date>${statusXml}
     <inventors>${inventorsXml}
     </inventors>
   </us-bibliographic-data-application>
