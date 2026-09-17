@@ -1,0 +1,26 @@
+key: neurips
+name: NeurIPS
+kind_defaults: [research_paper]
+document_class: article
+class_options: []
+packages: [neurips_2024, graphicx, hyperref, cite, amsmath, amssymb, natbib]
+class_options_note: "\\usepackage[final]{neurips_2024}"
+bib_style: plainnat
+required_sections: [abstract, introduction, conclusion, references]
+recommended_sections:
+  - introduction
+  - related-work
+  - method
+  - experiments
+  - results
+  - discussion
+  - conclusion
+length:
+  target_pages: 9
+  hard_limit_pages: 9
+  appendix_allowed: true
+notes: |
+  Single-column, 9-page hard limit for main text (references and
+  appendix don't count against limit). natbib author-year citations.
+  Broader Impact statement encouraged. Reproducibility checklist
+  expected. Anonymized during submission (blank authors).

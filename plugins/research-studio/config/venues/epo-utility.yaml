@@ -1,0 +1,18 @@
+key: epo-utility
+name: EPO Utility Patent Application
+kind_defaults: [patent_application]
+document_class: article
+class_options: [12pt, a4paper]
+packages: [geometry, graphicx, setspace]
+geometry: [margin=2.5cm]
+bib_style: plain
+required_sections: [field, background, summary, drawings, detailed, claims, abstract_pat]
+length:
+  target_pages: null
+  hard_limit_pages: null
+notes: |
+  European Patent Office utility patent application. Similar structure
+  to USPTO but with A4 paper, 2.5 cm margins, and slightly different
+  formal requirements. Claims still numbered from 1; dependent claims
+  reference parents. EPO does not accept means-plus-function claims
+  as broadly as USPTO — narrow claim language.

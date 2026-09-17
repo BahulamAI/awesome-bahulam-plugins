@@ -1,0 +1,711 @@
+apiVersion: bahulam.plugin/1
+kind: Plugin
+metadata:
+  name: research-studio
+  version: 0.2.0
+  description: >
+    Compositional research-document studio. Produces research papers,
+    patent applications, technical reports, and grant proposals from
+    source material (PDFs, notes, experiments, URLs) with claim
+    verification and venue-specific formatting. Documents are stored
+    as a JSON DSL and compiled to Markdown / LaTeX / PDF / DOCX / USPTO
+    XML on demand. Vision-capable agents describe and cross-check
+    figures. Domain specialists (Source, Outline, Draft, Cite, Vision,
+    Figure, Claim, Style, Reviewer, plus patent-only Prior Art and
+    Claim Author) each own a slice of the DSL and are orchestrated by
+    a Research Director.
+  author: BahulamAI
+  repository: https://github.com/BahulamAI/awesome-bahulam-plugins
+
+config:
+  requirements:
+    system: []                        # pandoc + pdflatex optional for pdf output
+    env: []                           # provider keys optional
+    filesystem: []
+
+  state:
+    tables:
+      - name: research_documents
+        columns:
+          - { name: id, type: INTEGER, primary: true, autoincrement: true }
+          - { name: slug, type: TEXT, not_null: true }
+          - { name: title, type: TEXT, not_null: true }
+          - { name: kind, type: TEXT, not_null: true, default: "'research_paper'" }
+          - { name: venue, type: TEXT, not_null: true, default: "'arxiv'" }
+          - { name: dsl_path, type: TEXT, not_null: true, default: "''" }
+          - { name: md_path, type: TEXT, not_null: true, default: "''" }
+          - { name: status, type: TEXT, not_null: true, default: "'draft'" }
+          - { name: word_count, type: INTEGER, default: '0' }
+          - { name: created_at, type: TEXT, not_null: true }
+          - { name: updated_at, type: TEXT, not_null: true }
+        indexes:
+          - { columns: [slug] }
+          - { columns: [status] }
+
+      - name: research_compilations
+        columns:
+          - { name: id, type: INTEGER, primary: true, autoincrement: true }
+          - { name: slug, type: TEXT, not_null: true }
+          - { name: target, type: TEXT, not_null: true }
+          - { name: output_path, type: TEXT, not_null: true }
+          - { name: status, type: TEXT, not_null: true }
+          - { name: notes, type: TEXT, not_null: true, default: "''" }
+          - { name: created_at, type: TEXT, not_null: true }
+        indexes:
+          - { columns: [slug] }
+          - { columns: [target] }
+
+    context_always:
+      - { stream: documents, limit: 5 }
+
+    context_tools:
+      - name: list_research_documents
+        table: research_documents
+        description: List saved research documents with status, path, and word count.
+        parameters:
+          type: object
+          properties:
+            limit: { type: integer }
+
+      - name: list_research_compilations
+        table: research_compilations
+        description: List compilation outcomes by document.
+        parameters:
+          type: object
+          properties:
+            slug:  { type: string }
+            limit: { type: integer }
+        where: "slug = ?"
+        params: [slug]
+
+  tools:
+    # ── Document lifecycle ──────────────────────────────────────────
+    - name: create_document
+      description: >
+        Initialize a new research document with an empty outline, empty
+        references, and a compiled document.md.
+      tool: ./tools/create-document.mjs
+      parameters:
+        type: object
+        properties:
+          name:  { type: string, description: "Document slug (lowercase, hyphens)." }
+          title: { type: string }
+          kind:  { type: string, enum: [research_paper, patent_application, report, grant, review] }
+          venue: { type: string, description: "Template key from config/venues/, e.g. arxiv, ieee-conf, neurips, acl." }
+          authors: { type: array, items: { type: object }, description: "[{name, affiliation?, email?}]" }
+          cwd:   { type: string }
+        required: [name]
+
+    - name: get_document
+      description: >
+        Return a compact summary of the document DSL (outline, section
+        word counts, refs count, source count, unsupported-claim count).
+        Pass full:true for the raw JSON. Call at the start of every
+        specialist turn.
+      tool: ./tools/get-document.mjs
+      parameters:
+        type: object
+        properties:
+          slug: { type: string }
+          full: { type: boolean }
+          cwd:  { type: string }
+        required: [slug]
+
+    - name: snapshot_document
+      description: Snapshot document.json into snapshots/ before large edits.
+      tool: ./tools/snapshot-document.mjs
+      parameters:
+        type: object
+        properties:
+          slug:  { type: string }
+          label: { type: string }
+          cwd:   { type: string }
+        required: [slug]
+
+    - name: compile_document
+      description: >
+        Compile document.json to a target format (md / tex / pdf).
+        Markdown is always kept in sync at <slug>/document.md; other
+        targets are written to <slug>/exports/. PDF requires pandoc +
+        pdflatex on PATH.
+      tool: ./tools/compile-document.mjs
+      parameters:
+        type: object
+        properties:
+          slug:   { type: string }
+          target: { type: string, enum: [md, tex, pdf, docx, uspto_xml] }
+          allow_unsupported_claims: { type: boolean, description: "Default false — refuses to compile 'final' with unverified claims." }
+          cwd:    { type: string }
+        required: [slug, target]
+
+    # ── Source Agent ────────────────────────────────────────────────
+    - name: ingest_pdf
+      description: >
+        Ingest a PDF (local path or URL) into sources/. Uses configured
+        pdf provider (env THREEJS_PDF_PROVIDER; local uses pdf-parse-lite).
+        Extracts text + reference list into sources/extracted/<id>.json.
+      tool: ./tools/ingest-pdf.mjs
+      parameters:
+        type: object
+        properties:
+          slug:      { type: string }
+          src:       { type: string, description: "Local path or https URL." }
+          id:        { type: string, description: "Stable source id (default: filename stem)." }
+          ref_id:    { type: string, description: "If provided, links source to this reference id." }
+          provider:  { type: string }
+          cwd:       { type: string }
+        required: [slug, src]
+
+    - name: ingest_url
+      description: Snapshot a URL to sources/<id>.md (readability-cleaned HTML → Markdown).
+      tool: ./tools/ingest-url.mjs
+      parameters:
+        type: object
+        properties:
+          slug:   { type: string }
+          url:    { type: string }
+          id:     { type: string }
+          ref_id: { type: string }
+          cwd:    { type: string }
+        required: [slug, url]
+
+    - name: add_note
+      description: Add a free-form note associated with a section (or unattached).
+      tool: ./tools/add-note.mjs
+      parameters:
+        type: object
+        properties:
+          slug:    { type: string }
+          section: { type: string }
+          text:    { type: string }
+          author:  { type: string }
+          cwd:     { type: string }
+        required: [slug, text]
+
+    - name: add_experiment
+      description: Register an experimental data file (CSV/JSON) as a source.
+      tool: ./tools/add-experiment.mjs
+      parameters:
+        type: object
+        properties:
+          slug:        { type: string }
+          path:        { type: string }
+          id:          { type: string }
+          description: { type: string }
+          cwd:         { type: string }
+        required: [slug, path]
+
+    - name: list_sources
+      description: List sources registered on the document.
+      tool: ./tools/list-sources.mjs
+      parameters:
+        type: object
+        properties:
+          slug: { type: string }
+          kind: { type: string, enum: [pdf, url, note, experiment] }
+          cwd:  { type: string }
+        required: [slug]
+
+    # ── Outline Agent ───────────────────────────────────────────────
+    - name: set_outline
+      description: Replace the document outline with a full section list.
+      tool: ./tools/set-outline.mjs
+      parameters:
+        type: object
+        properties:
+          slug:     { type: string }
+          sections: { type: array, items: { type: object }, description: "[{id, heading, target_words?, subsections?}]" }
+          cwd:      { type: string }
+        required: [slug, sections]
+
+    - name: add_section
+      description: Append or insert a section in the outline.
+      tool: ./tools/add-section.mjs
+      parameters:
+        type: object
+        properties:
+          slug:         { type: string }
+          id:           { type: string }
+          heading:      { type: string }
+          target_words: { type: integer }
+          after:        { type: string, description: "Insert after this section id (else appended)." }
+          cwd:          { type: string }
+        required: [slug, id, heading]
+
+    - name: reorder_sections
+      description: Reorder the outline by explicit id list.
+      tool: ./tools/reorder-sections.mjs
+      parameters:
+        type: object
+        properties:
+          slug:  { type: string }
+          order: { type: array, items: { type: string } }
+          cwd:   { type: string }
+        required: [slug, order]
+
+    - name: delete_section
+      description: Remove a section (and its content) from the document.
+      tool: ./tools/delete-section.mjs
+      parameters:
+        type: object
+        properties:
+          slug: { type: string }
+          id:   { type: string }
+          cwd:  { type: string }
+        required: [slug, id]
+
+    # ── Draft Agent ─────────────────────────────────────────────────
+    # The Draft Agent writes prose via its own gateway (see
+    # config/agents/draft.yaml). These tools are pure state mutations —
+    # the agent generates the content itself and persists it here.
+    - name: set_section_content
+      description: >
+        Set a section's prose (append or replace). The Draft Agent
+        writes the text itself via its own gateway; this tool only
+        persists it and re-computes word counts.
+      tool: ./tools/set-section-content.mjs
+      parameters:
+        type: object
+        properties:
+          slug:       { type: string }
+          section_id: { type: string }
+          content:    { type: string }
+          mode:       { type: string, enum: [replace, append], description: "Default replace." }
+          cwd:        { type: string }
+        required: [slug, section_id, content]
+
+    - name: add_todo
+      description: Add a TODO marker (optionally scoped to a section) — surfaced in the compiled Markdown.
+      tool: ./tools/add-todo.mjs
+      parameters:
+        type: object
+        properties:
+          slug:    { type: string }
+          section: { type: string }
+          text:    { type: string }
+          cwd:     { type: string }
+        required: [slug, text]
+
+    # ── Cite Agent ──────────────────────────────────────────────────
+    - name: add_reference
+      description: Add a reference entry (BibTeX JSON fields or raw BibTeX string).
+      tool: ./tools/add-reference.mjs
+      parameters:
+        type: object
+        properties:
+          slug:   { type: string }
+          ref_id: { type: string }
+          type:   { type: string, description: "'article', 'inproceedings', 'book', etc." }
+          fields: { type: object, description: "Bib fields: authors, title, year, doi, ..." }
+          bibtex: { type: string, description: "Raw BibTeX string (alternative to fields)." }
+          cwd:    { type: string }
+        required: [slug, ref_id]
+
+    - name: lookup_doi
+      description: >
+        Look up a reference via DOI or free-text query using the
+        configured ref provider (Crossref by default; local regex-only
+        fallback).
+      tool: ./tools/lookup-doi.mjs
+      parameters:
+        type: object
+        properties:
+          slug:     { type: string }
+          query:    { type: string, description: "DOI, arXiv id, or free text." }
+          register: { type: boolean, description: "If true (default), add the returned entry to references." }
+          ref_id:   { type: string, description: "Override id when registering." }
+          provider: { type: string }
+          cwd:      { type: string }
+        required: [slug, query]
+
+    - name: attach_citation
+      description: Attach a reference to a section (adds to section.cites).
+      tool: ./tools/attach-citation.mjs
+      parameters:
+        type: object
+        properties:
+          slug:       { type: string }
+          section_id: { type: string }
+          ref_ids:    { type: array, items: { type: string } }
+          cwd:        { type: string }
+        required: [slug, section_id, ref_ids]
+
+    - name: format_bibliography
+      description: >
+        Write refs.bib per venue style (IEEE / ACM / APA / arXiv-plain).
+        The compiler always keeps refs.bib in sync; this tool lets the
+        Cite Agent force a style change.
+      tool: ./tools/format-bibliography.mjs
+      parameters:
+        type: object
+        properties:
+          slug:  { type: string }
+          style: { type: string, enum: [ieee, acm, apa, arxiv, natbib] }
+          cwd:   { type: string }
+        required: [slug, style]
+
+    - name: dedupe_references
+      description: Detect and merge duplicate references (by DOI, then by title+year).
+      tool: ./tools/dedupe-references.mjs
+      parameters:
+        type: object
+        properties:
+          slug: { type: string }
+          cwd:  { type: string }
+        required: [slug]
+
+    # ── Vision Agent ────────────────────────────────────────────────
+    # The Vision Analyst uses its own vision-capable gateway (see
+    # config/agents/vision-analyst.yaml). Tools here are structured
+    # extractors (PDF → images) and pure state mutations (persist the
+    # agent's description / verdict).
+    - name: extract_figures_from_pdf
+      description: >
+        Extract figure images from an ingested PDF source into
+        sources/extracted/<source_id>/figures/. Requires a pdf provider
+        with layout support (the local fallback extracts text only and
+        will report zero figures).
+      tool: ./tools/extract-figures-from-pdf.mjs
+      parameters:
+        type: object
+        properties:
+          slug:      { type: string }
+          source_id: { type: string }
+          cwd:       { type: string }
+        required: [slug, source_id]
+
+    - name: set_figure_description
+      description: >
+        Store a figure's description on its DSL entry. The Vision Analyst
+        generates the description via its own vision-capable gateway; this
+        tool only persists it.
+      tool: ./tools/set-figure-description.mjs
+      parameters:
+        type: object
+        properties:
+          slug:        { type: string }
+          figure_id:   { type: string }
+          description: { type: string }
+          caption:     { type: string, description: "Optional short caption; overrides existing." }
+          cwd:         { type: string }
+        required: [slug, figure_id, description]
+
+    - name: set_claim_verdict
+      description: >
+        Persist a vision-verified verdict on a claim. Verdict is
+        supported / contradicted / inconclusive. The Vision Analyst
+        derives the verdict itself by looking at the figure; this tool
+        only records it.
+      tool: ./tools/set-claim-verdict.mjs
+      parameters:
+        type: object
+        properties:
+          slug:       { type: string }
+          claim_id:   { type: string }
+          verdict:    { type: string, enum: [supported, contradicted, inconclusive] }
+          figure_ref: { type: string, description: "Figure id used for the verification." }
+          confidence: { type: number, description: "0-1." }
+          reason:     { type: string }
+          cwd:        { type: string }
+        required: [slug, claim_id, verdict]
+
+    # ── Figure Agent ────────────────────────────────────────────────
+    - name: import_figure
+      description: >
+        Register an image/figure file into figures/. Copies from an
+        absolute path or URL into the document folder. Does NOT place
+        the figure in a section — call place_figure for that.
+      tool: ./tools/import-figure.mjs
+      parameters:
+        type: object
+        properties:
+          slug:      { type: string }
+          path:      { type: string, description: "Local path, relative-to-doc path, or https URL." }
+          id:        { type: string, description: "Figure id (default: filename stem)." }
+          caption:   { type: string }
+          placement: { type: string, enum: [h, t, b, H], description: "LaTeX float placement (default h)." }
+          cwd:       { type: string }
+        required: [slug, path]
+
+    - name: place_figure
+      description: Bind a registered figure to one or more outline sections.
+      tool: ./tools/place-figure.mjs
+      parameters:
+        type: object
+        properties:
+          slug:        { type: string }
+          figure_id:   { type: string }
+          section_ids: { type: array, items: { type: string } }
+          cwd:         { type: string }
+        required: [slug, figure_id, section_ids]
+
+    - name: caption_figure
+      description: Set the short caption (or placement) on a registered figure.
+      tool: ./tools/caption-figure.mjs
+      parameters:
+        type: object
+        properties:
+          slug:      { type: string }
+          figure_id: { type: string }
+          caption:   { type: string }
+          placement: { type: string, enum: [h, t, b, H] }
+          cwd:       { type: string }
+        required: [slug, figure_id]
+
+    - name: list_figures
+      description: Return the figure manifest for a document.
+      tool: ./tools/list-figures.mjs
+      parameters:
+        type: object
+        properties:
+          slug: { type: string }
+          cwd:  { type: string }
+        required: [slug]
+
+    # ── Claim Agent ─────────────────────────────────────────────────
+    - name: add_claim
+      description: >
+        Register a verifiable assertion (quantitative / complexity /
+        qualitative / novelty). Claim starts unverified — Vision
+        Analyst flips verified=true via set_claim_verdict.
+      tool: ./tools/add-claim.mjs
+      parameters:
+        type: object
+        properties:
+          slug:         { type: string }
+          text:         { type: string }
+          section:      { type: string }
+          id:           { type: string }
+          kind:         { type: string, enum: [quantitative, complexity, qualitative, novelty] }
+          supported_by: { type: array, items: { type: string }, description: "source ids OR ref ids" }
+          value:        { type: number, description: "Numeric value for quantitative claims." }
+          unit:         { type: string }
+          cwd:          { type: string }
+        required: [slug, text, section]
+
+    - name: link_claim_to_source
+      description: Attach source ids or reference ids to a claim's supported_by list.
+      tool: ./tools/link-claim-to-source.mjs
+      parameters:
+        type: object
+        properties:
+          slug:       { type: string }
+          claim_id:   { type: string }
+          source_ids: { type: array, items: { type: string } }
+          ref_ids:    { type: array, items: { type: string } }
+          cwd:        { type: string }
+        required: [slug, claim_id]
+
+    - name: list_claims
+      description: List claims (optionally filter by section / verified).
+      tool: ./tools/list-claims.mjs
+      parameters:
+        type: object
+        properties:
+          slug:     { type: string }
+          section:  { type: string }
+          verified: { type: boolean }
+          cwd:      { type: string }
+        required: [slug]
+
+    - name: list_unsupported_claims
+      description: >
+        Return claims where verified !== true OR supported_by is empty.
+        The Director runs this before compiling non-Markdown targets.
+      tool: ./tools/list-unsupported-claims.mjs
+      parameters:
+        type: object
+        properties:
+          slug: { type: string }
+          cwd:  { type: string }
+        required: [slug]
+
+    # ── Style Agent ─────────────────────────────────────────────────
+    - name: apply_venue_template
+      description: >
+        Apply a venue pack (config/venues/*.yaml) to the document —
+        sets venue + bib_style, and appends any missing required
+        sections.
+      tool: ./tools/apply-venue-template.mjs
+      parameters:
+        type: object
+        properties:
+          slug:  { type: string }
+          venue: { type: string, description: "arxiv | ieee-conf | neurips | acl | acm | uspto-utility | epo-utility | nsf-grant" }
+          cwd:   { type: string }
+        required: [slug, venue]
+
+    - name: check_length
+      description: Return per-section word count vs target plus totals.
+      tool: ./tools/check-length.mjs
+      parameters:
+        type: object
+        properties:
+          slug: { type: string }
+          cwd:  { type: string }
+        required: [slug]
+
+    - name: check_venue_compliance
+      description: >
+        Cross-check document against its venue pack (required sections,
+        bib style, page limits). Returns { ok, issues[], warnings[] }.
+      tool: ./tools/check-venue-compliance.mjs
+      parameters:
+        type: object
+        properties:
+          slug: { type: string }
+          cwd:  { type: string }
+        required: [slug]
+
+    - name: set_watermark
+      description: >
+        Set or clear the document's watermark (DRAFT, CONFIDENTIAL, etc.).
+        Applied by every compile target — Markdown banner, LaTeX
+        draftwatermark package, USPTO XML publication-status element.
+        Pass text:null (or empty "") to explicitly opt out — otherwise
+        the compiler auto-applies DRAFT when unverified claims exist.
+      tool: ./tools/set-watermark.mjs
+      parameters:
+        type: object
+        properties:
+          slug:    { type: string }
+          text:    { description: "String label OR null to clear." }
+          opacity: { type: number, description: "0-1 (default 0.15)" }
+          angle:   { type: number, description: "Degrees, LaTeX/PDF only (default 45)" }
+          color:   { type: string, description: "CSS color (default #888888)" }
+          cwd:     { type: string }
+        required: [slug]
+
+    # ── Reviewer Agent ──────────────────────────────────────────────
+    - name: add_review
+      description: >
+        Persist a review the Reviewer Agent authored via its own
+        gateway. verdict is accept | revise | reject; optional score 0-10.
+      tool: ./tools/add-review.mjs
+      parameters:
+        type: object
+        properties:
+          slug:        { type: string }
+          verdict:     { type: string, enum: [accept, revise, reject] }
+          comments:    { type: string }
+          persona:     { type: string, description: "e.g. harsh_academic | industry_engineer | patent_examiner" }
+          rubric:      { type: string, description: "e.g. novelty | clarity | rigor | contribution" }
+          score:       { type: number, description: "0-10" }
+          per_section: { type: object, description: "Map { section_id -> comment }." }
+          id:          { type: string }
+          cwd:         { type: string }
+        required: [slug, verdict, comments]
+
+    - name: list_reviews
+      description: List all reviews on a document (returns summaries; use get_document full for bodies).
+      tool: ./tools/list-reviews.mjs
+      parameters:
+        type: object
+        properties:
+          slug: { type: string }
+          cwd:  { type: string }
+        required: [slug]
+
+    # ── Patent state tools ──────────────────────────────────────────
+    - name: set_patent_metadata
+      description: >
+        Set doc.patent.{type, priority_date, inventors}. Only applies
+        when kind === "patent_application".
+      tool: ./tools/set-patent-metadata.mjs
+      parameters:
+        type: object
+        properties:
+          slug:          { type: string }
+          type:          { type: string, enum: [utility, provisional, design, plant] }
+          priority_date: { type: string, description: "ISO date YYYY-MM-DD or null" }
+          inventors:     { type: array, items: { type: object }, description: "[{name, address?}]" }
+          cwd:           { type: string }
+        required: [slug]
+
+    - name: add_claim_tree_item
+      description: >
+        Append an independent or dependent claim to doc.patent.claims_tree.
+        Dependent claims require depends_on (id of the parent claim).
+      tool: ./tools/add-claim-tree-item.mjs
+      parameters:
+        type: object
+        properties:
+          slug:       { type: string }
+          text:       { type: string }
+          kind:       { type: string, enum: [independent, dependent] }
+          depends_on: { type: string }
+          id:         { type: string, description: "Auto: next integer as string." }
+          cwd:        { type: string }
+        required: [slug, text]
+
+    - name: update_claim_tree_item
+      description: Narrow / broaden / rewrite an existing patent claim's text (id stable).
+      tool: ./tools/update-claim-tree-item.mjs
+      parameters:
+        type: object
+        properties:
+          slug: { type: string }
+          id:   { type: string }
+          text: { type: string }
+          cwd:  { type: string }
+        required: [slug, id, text]
+
+    - name: add_prior_art
+      description: Register a reference from doc.references as prior art on the patent application.
+      tool: ./tools/add-prior-art.mjs
+      parameters:
+        type: object
+        properties:
+          slug:      { type: string }
+          ref_id:    { type: string }
+          relevance: { type: string, enum: [background, similar, distinguishing] }
+          note:      { type: string }
+          id:        { type: string }
+          cwd:       { type: string }
+        required: [slug, ref_id]
+
+    - name: set_claim_novelty
+      description: >
+        Persist a novelty verdict on a patent claim (novel / similar_to_prior /
+        anticipated / inconclusive). Prior Art Agent derives verdict via its
+        own gateway; this tool only records it.
+      tool: ./tools/set-claim-novelty.mjs
+      parameters:
+        type: object
+        properties:
+          slug:           { type: string }
+          claim_id:       { type: string }
+          verdict:        { type: string, enum: [novel, similar_to_prior, anticipated, inconclusive] }
+          prior_art_refs: { type: array, items: { type: string } }
+          reason:         { type: string }
+          cwd:            { type: string }
+        required: [slug, claim_id, verdict]
+
+    - name: check_claim_hierarchy
+      description: >
+        Validate patent claims_tree — reports orphans, cycles, depth,
+        and independents/dependents counts.
+      tool: ./tools/check-claim-hierarchy.mjs
+      parameters:
+        type: object
+        properties:
+          slug: { type: string }
+          cwd:  { type: string }
+        required: [slug]
+
+  workspace: ./config/workspace.yaml
+  agents_from: ./config/agents/
+
+  views:
+    - type: panel
+      name: Research Studio
+      source: ./workspace/studio.html
+    - type: panel
+      name: References
+      source: ./workspace/references.html
+    - type: panel
+      name: Sources
+      source: ./workspace/sources.html
+    - type: panel
+      name: Compilations
+      source: ./workspace/compile.html

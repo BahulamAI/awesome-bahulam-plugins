@@ -1,0 +1,22 @@
+key: acm
+name: ACM Conference (acmart)
+kind_defaults: [research_paper]
+document_class: acmart
+class_options: [sigconf]
+packages: [graphicx, hyperref]
+bib_style: ACM-Reference-Format
+required_sections: [abstract, introduction, conclusion, references]
+recommended_sections:
+  - introduction
+  - related-work
+  - method
+  - evaluation
+  - discussion
+  - conclusion
+length:
+  target_pages: 10
+  hard_limit_pages: 12
+notes: |
+  ACM conference paper. Two-column sigconf layout. CCS concepts and
+  ACM Reference Format required. Anonymization varies by venue.
+  Author bio boxes appear on first page for camera-ready.
