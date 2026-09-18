@@ -9,6 +9,7 @@ export async function call(args = {}, options = {}) {
   if (!board) throw new Error(`board ${boardId} not found`);
   const pins = state.query('SELECT * FROM pi_pins WHERE board_id = ? ORDER BY id ASC', [boardId]);
   const actions = state.query('SELECT * FROM pi_actions WHERE board_id = ? ORDER BY id ASC', [boardId]);
+  const advisories = state.query('SELECT * FROM pi_advisories WHERE board_id = ? ORDER BY id ASC', [boardId]);
   const approvalGates = actions.filter(row => Number(row.requires_approval) === 1);
   const writesExecuted = actions.filter(row => ['write', 'pwm'].includes(row.action) && row.status === 'completed');
   const blockedActions = actions.filter(row => ['blocked', 'failed'].includes(row.status));
@@ -55,7 +56,13 @@ export async function call(args = {}, options = {}) {
     actions.length
       ? actions.map(row => `- ${row.action}${row.pin !== null && row.pin !== undefined ? ` pin=${row.pin}` : ''} — ${row.status}${row.requires_approval ? ' (approval required)' : ''}: ${row.value_summary || ''}`).join('\n')
       : '- No actions recorded yet.',
+    '',
+    '## Advisories',
+    '- These are recommendations only — no advisor tool installs, flashes, or configures anything.',
+    advisories.length
+      ? advisories.map(row => `- ${row.advisor} (${row.workload || 'n/a'}, ${row.ram_gb}GB tier): ${row.rationale}`).join('\n')
+      : '- None run yet.',
   ].join('\n');
 
-  return { success: true, output: { board, pins, actions, approval_gates: approvalGates, markdown } };
+  return { success: true, output: { board, pins, actions, advisories, approval_gates: approvalGates, markdown } };
 }
