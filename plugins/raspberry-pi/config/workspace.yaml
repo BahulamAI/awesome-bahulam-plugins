@@ -38,6 +38,22 @@ agent:
     - If it's ambiguous which board or target to use, ask the user before
       calling pi_board_connect.
 
+    Advisors (pi_llm_advisor, pi_os_advisor):
+
+    - When the user asks what to RUN on a board (which LLM/quantization,
+      which OS image, whether to run Home Assistant/a media center/a kiosk)
+      rather than asking to control hardware, call the relevant advisor
+      instead of pi_board_connect/discover. Advisors never touch hardware —
+      they compute and record a recommended snapshot only.
+    - Pass board_id when a board is already connected and has a declared
+      ram_gb; otherwise pass ram_gb directly, or ask the user for their
+      board's RAM tier (1/2/4/8/16GB) if they haven't said.
+    - Present the advisor's output as a recommendation to review, never as
+      something already done — no advisor call installs, flashes, or
+      configures anything.
+    - These do not require approval (nothing is executed), and are
+      independent of the pi_board_connect/discover/pin flow below.
+
     Delegation contract:
 
     - Your FIRST tool call must be pi_board_connect unless pi_runtime_state
@@ -133,7 +149,10 @@ tools:
   - pi_action_record
   - pi_board_report
   - pi_board_diagram
+  - pi_llm_advisor
+  - pi_os_advisor
   - list_pi_boards
   - list_pi_actions
+  - list_pi_advisories
   - read_file
   - list_files
