@@ -2,7 +2,7 @@ apiVersion: bahulam.plugin/1
 kind: Plugin
 metadata:
   name: raspberry-pi
-  version: 0.1.0
+  version: 0.2.0
   description: >
     Raspberry Pi GPIO and I2C sensor operations runtime. The Pi operator
     connects to a board — running locally on the Pi, remotely over SSH, or
@@ -39,6 +39,8 @@ config:
           - { name: port, type: INTEGER, not_null: true, default: 0 }
           - { name: user, type: TEXT, not_null: true, default: "''" }
           - { name: auth_env, type: TEXT, not_null: true, default: "''" }
+          - { name: ram_gb, type: INTEGER }
+          - { name: model, type: TEXT, not_null: true, default: "''" }
           - { name: status, type: TEXT, not_null: true, default: "'planned'" }
           - { name: created_at, type: TEXT, not_null: true }
           - { name: updated_at, type: TEXT, not_null: true }
@@ -119,6 +121,25 @@ config:
         indexes:
           - { columns: [board_id, address, register], unique: true }
 
+      - name: pi_advisories
+        columns:
+          - { name: id, type: INTEGER, primary: true, autoincrement: true }
+          - { name: board_id, type: INTEGER, references: "pi_boards(id)" }
+          - { name: advisor, type: TEXT, not_null: true }
+          - { name: workload, type: TEXT, not_null: true, default: "''" }
+          - { name: ram_gb, type: INTEGER, not_null: true }
+          - { name: inputs_json, type: TEXT, not_null: true, default: "'{}'" }
+          - {
+              name: recommendation_json,
+              type: TEXT,
+              not_null: true,
+              default: "'{}'",
+            }
+          - { name: rationale, type: TEXT, not_null: true, default: "''" }
+          - { name: created_at, type: TEXT, not_null: true }
+        indexes:
+          - { columns: [board_id] }
+
     context_always:
       - pi_runtime_state
       - { stream: pi_activity, limit: 8 }
@@ -135,6 +156,17 @@ config:
       - name: list_pi_actions
         table: pi_actions
         description: List GPIO/sensor actions recorded for a board.
+        parameters:
+          type: object
+          properties:
+            board_id: { type: integer }
+            limit: { type: integer }
+        where: "board_id = ?"
+        params: [board_id]
+
+      - name: list_pi_advisories
+        table: pi_advisories
+        description: List recorded LLM/OS advisor recommendations for a board.
         parameters:
           type: object
           properties:
@@ -176,6 +208,16 @@ config:
             {
               type: boolean,
               description: "Create a new board even when an active matching board exists. Default false.",
+            }
+          ram_gb:
+            {
+              type: integer,
+              description: "Declared RAM in GB (1, 2, 4, 8, or 16 for Pi 5). Not probed automatically — used by pi_llm_advisor/pi_os_advisor. Can be set or updated on an existing board without force_new.",
+            }
+          model:
+            {
+              type: string,
+              description: 'Declared board model, e.g. "Raspberry Pi 5". Informational; not probed automatically.',
             }
         required: [name]
 
@@ -352,6 +394,55 @@ config:
         properties:
           board_id: { type: integer }
         required: [board_id]
+
+    - name: pi_llm_advisor
+      description: >
+        Recommend a local-LLM setup (model size class, quantization, runtime,
+        swap/storage advice) for a Pi 5's RAM tier and a stated use case.
+        Never installs or downloads anything — it returns a recommended
+        snapshot for the user to act on, and records it as an advisory. Pass
+        board_id to use a board's declared ram_gb, or ram_gb directly to
+        advise without a connected board.
+      tool: ./tools/pi-llm-advisor.mjs
+      parameters:
+        type: object
+        properties:
+          board_id: { type: integer }
+          ram_gb:
+            {
+              type: integer,
+              description: "Overrides the board's declared RAM, or required if board_id is omitted.",
+            }
+          use_case: { type: string, enum: [chat, rag, coding, voice_assistant] }
+          context_length_pref: { type: string, enum: [short, long] }
+        required: []
+
+    - name: pi_os_advisor
+      description: >
+        Recommend an OS image, boot media, and starter config for a stated
+        workload (headless server, home assistant, media center, kiosk,
+        desktop) on a Pi 5. Never installs, flashes, or configures anything —
+        it returns a recommended snapshot for the user to act on, and
+        records it as an advisory. Pass board_id to use a board's declared
+        ram_gb, or ram_gb directly to advise without a connected board.
+      tool: ./tools/pi-os-advisor.mjs
+      parameters:
+        type: object
+        properties:
+          board_id: { type: integer }
+          ram_gb:
+            {
+              type: integer,
+              description: "Overrides the board's declared RAM, or required if board_id is omitted.",
+            }
+          workload:
+            {
+              type: string,
+              enum:
+                [headless-server, home-assistant, media-center, kiosk, desktop],
+            }
+          boot_media_pref: { type: string, enum: [sd, nvme, auto] }
+        required: []
 
   workspace: ./config/workspace.yaml
   agents_from: ./config/agents/
