@@ -10,6 +10,8 @@ import { call as seedSim } from './tools/pi-sim-seed.mjs';
 import { call as recordAction } from './tools/pi-action-record.mjs';
 import { call as reportBoard } from './tools/pi-board-report.mjs';
 import { call as diagramBoard } from './tools/pi-board-diagram.mjs';
+import { call as advisorLlm } from './tools/pi-llm-advisor.mjs';
+import { call as advisorOs } from './tools/pi-os-advisor.mjs';
 
 let failures = 0;
 function ok(label, cond) {
@@ -26,6 +28,8 @@ CREATE TABLE pi_boards (
   port INTEGER NOT NULL DEFAULT 0,
   user TEXT NOT NULL DEFAULT '',
   auth_env TEXT NOT NULL DEFAULT '',
+  ram_gb INTEGER,
+  model TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT 'planned',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
@@ -68,6 +72,17 @@ CREATE TABLE pi_sim_registers (
   fault TEXT NOT NULL DEFAULT '',
   updated_at TEXT NOT NULL,
   UNIQUE(board_id, address, register)
+);
+CREATE TABLE pi_advisories (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  board_id INTEGER,
+  advisor TEXT NOT NULL,
+  workload TEXT NOT NULL DEFAULT '',
+  ram_gb INTEGER NOT NULL,
+  inputs_json TEXT NOT NULL DEFAULT '{}',
+  recommendation_json TEXT NOT NULL DEFAULT '{}',
+  rationale TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
 );
 `;
 
@@ -234,6 +249,41 @@ try {
   ok('pi_board_diagram flags the actuator pin', diagram.output.mermaid.includes('class PIN_23') && /class PIN_23\S* actuator/.test(diagram.output.mermaid));
   ok('pi_board_diagram counts pins and actuators', diagram.output.pin_count === 2 && diagram.output.actuator_count === 1);
   ok('pi_board_diagram wraps a fenced mermaid block', diagram.output.markdown.startsWith('```mermaid\n') && diagram.output.markdown.trim().endsWith('```'));
+
+  // ===================== ADVISORS =====================
+  const advisorOptions = { state: Promise.resolve(state), workspaceRoot: process.cwd() };
+
+  const llmTiny = await advisorLlm({ ram_gb: 2 }, advisorOptions);
+  ok('pi_llm_advisor declines a 2GB tier', llmTiny.success && llmTiny.output.recommendation.viable === false);
+
+  const llm8gb = await advisorLlm({ ram_gb: 8, use_case: 'chat' }, advisorOptions);
+  ok('pi_llm_advisor recommends a viable setup at 8GB', llm8gb.output.recommendation.viable === true);
+  ok('pi_llm_advisor mentions an 8B-class model at 8GB', /8b/i.test(llm8gb.output.recommendation.model_size_class));
+  ok('pi_llm_advisor advises swap at 8GB', /swap|zram/i.test(llm8gb.output.recommendation.swap_advice));
+
+  const osHomeAssistant = await advisorOs({ ram_gb: 8, workload: 'home-assistant' }, advisorOptions);
+  ok('pi_os_advisor recommends HAOS or a container route for home-assistant', /Home Assistant/i.test(osHomeAssistant.output.recommendation.image) || /Home Assistant/i.test(osHomeAssistant.output.recommendation.alternative || ''));
+  ok('pi_os_advisor flags the NVMe M.2 HAT caveat when it resolves to nvme', osHomeAssistant.output.recommendation.boot_media === 'nvme' && osHomeAssistant.output.recommendation.boot_media_notes.some(n => /M\.2 HAT/i.test(n)));
+
+  const ramBoard = await connectBoard({ name: 'llm-box', target_kind: 'virtual', ram_gb: 16 }, virtualOptions);
+  ok('pi_board_connect accepts a declared ram_gb', ramBoard.success);
+  const llmFromBoard = await advisorLlm({ board_id: ramBoard.output.board_id }, advisorOptions);
+  ok('pi_llm_advisor resolves ram_gb from the board when no override is passed', llmFromBoard.output.ram_gb === 16);
+
+  let missingRamThrew = false;
+  try {
+    await advisorLlm({}, advisorOptions);
+  } catch {
+    missingRamThrew = true;
+  }
+  ok('pi_llm_advisor requires ram_gb when no board/override provides it', missingRamThrew);
+
+  const advisoryList = state.query('SELECT * FROM pi_advisories ORDER BY id ASC');
+  ok('pi_advisories recorded every advisor call', advisoryList.length === 4);
+
+  const boardReportWithAdvisories = await reportBoard({ board_id: ramBoard.output.board_id }, advisorOptions);
+  ok('pi_board_report includes an Advisories section', boardReportWithAdvisories.output.markdown.includes('## Advisories'));
+  ok('pi_board_report lists the board-scoped advisory', boardReportWithAdvisories.output.markdown.includes('llm_builder'));
 
   ok('activity stream captured the full lifecycle', state.list('pi_activity').length >= 10);
 } finally {
