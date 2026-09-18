@@ -69,6 +69,30 @@ turn the LED on — ask me before actually writing the pin.
 | `pi_action_record` | Record an action, approval, error, or freeform note. |
 | `pi_board_report` | Build a `PI_HANDOFF` report: board state, pin map, action trail, pending approval gates. |
 | `pi_board_diagram` | Render the board's declared pins as a Mermaid flowchart, grouped by mode, actuator pins highlighted. |
+| `pi_llm_advisor` | Recommend a local-LLM setup (model size, quantization, runtime, swap/storage) for a board's RAM tier and use case. Never installs anything. |
+| `pi_os_advisor` | Recommend an OS image, boot media, and starter config for a workload (server, home-assistant, media-center, kiosk, desktop). Never installs anything. |
+
+## Advisors: recommendations, not installs
+
+`pi_llm_advisor` and `pi_os_advisor` don't touch hardware, shell out, or hit
+the network at all — they cross-reference a board's declared RAM tier
+against `tools/board-specs.mjs`, a small reference table transcribed from
+the official [Raspberry Pi 5 product brief](https://pip-assets.raspberrypi.com/categories/892-raspberry-pi-5/documents/RP-008348-DS-6-raspberry-pi-5-product-brief.pdf)
+(CPU, RAM tiers, PCIe/NVMe caveats, etc.), and return a recommended
+"snapshot" — which model/quantization, which OS image, which boot media —
+for the user to act on manually. Every call is recorded to a
+`pi_advisories` row and shown up in `pi_board_report`'s Advisories section,
+but nothing is ever flashed, downloaded, or configured on your behalf.
+
+RAM isn't auto-detected — declare it once via `pi_board_connect`'s
+`ram_gb`/`model` args (works on any target_kind, including boards you
+haven't discovered yet), or pass `ram_gb` directly to either advisor to skip
+having a board connected at all:
+
+```text
+pi_llm_advisor { ram_gb: 8, use_case: "chat" }
+pi_os_advisor { board_id: 1, workload: "home-assistant" }
+```
 
 ## Visualizing the board
 
