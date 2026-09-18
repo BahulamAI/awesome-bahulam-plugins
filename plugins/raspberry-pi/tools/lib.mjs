@@ -156,6 +156,44 @@ export function upsertSimPin(state, boardId, pin, fields = {}) {
   return getSimPin(state, boardId, pin);
 }
 
+// --- advisor helpers -------------------------------------------------------
+
+/**
+ * Resolves the board (if board_id given) and the RAM tier (GB) to advise
+ * against: an explicit ram_gb argument wins, otherwise falls back to the
+ * board's declared ram_gb. Throws if neither is available. Advisors never
+ * probe hardware for this — ram_gb is declared via pi_board_connect or
+ * passed as an explicit override.
+ */
+export function resolveBoardRam(state, args = {}) {
+  const boardId = args.board_id !== undefined && args.board_id !== null ? Number(args.board_id) : null;
+  let board = null;
+  if (boardId !== null) {
+    if (!Number.isInteger(boardId) || boardId <= 0) throw new Error('board_id must be a positive integer');
+    board = state.query('SELECT * FROM pi_boards WHERE id = ? LIMIT 1', [boardId])[0];
+    if (!board) throw new Error(`board ${boardId} not found`);
+  }
+  const ramGb = args.ram_gb !== undefined && args.ram_gb !== null
+    ? Number(args.ram_gb)
+    : (board && board.ram_gb !== null && board.ram_gb !== undefined ? Number(board.ram_gb) : null);
+  if (!Number.isFinite(ramGb) || ramGb <= 0) {
+    throw new Error('ram_gb is unknown for this board — pass ram_gb explicitly, or declare it via pi_board_connect first');
+  }
+  return { board, ramGb };
+}
+
+export function recordAdvisory(state, { boardId, advisor, workload, ramGb, inputs, recommendation, rationale }) {
+  const ts = nowIso();
+  const result = state.query(
+    `INSERT INTO pi_advisories (board_id, advisor, workload, ram_gb, inputs_json, recommendation_json, rationale, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [boardId ?? null, advisor, workload || '', ramGb, JSON.stringify(inputs || {}), JSON.stringify(recommendation || {}), rationale || '', ts],
+  );
+  const advisoryId = Number(result.lastInsertRowid);
+  state.append('pi_activity', { type: 'pi_advisory_recorded', board_id: boardId ?? null, advisory_id: advisoryId, advisor, workload: workload || '' });
+  return advisoryId;
+}
+
 export function getSimRegister(state, boardId, address, register) {
   return state.query(
     'SELECT * FROM pi_sim_registers WHERE board_id = ? AND address = ? AND register = ? LIMIT 1',
