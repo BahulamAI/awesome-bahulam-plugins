@@ -1,74 +1,41 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Browser Use</title>
-  <style>
-    :root { color-scheme: light dark; --bg: #0f1115; --panel: #171b22; --line: #2a313c; --text: #eff3f8; --muted: #a5adba; --accent: #39c6d6; --warn: #f0b429; }
-    * { box-sizing: border-box; }
-    body { margin: 0; font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
-    main { display: grid; grid-template-columns: 280px 1fr; min-height: 100vh; }
-    aside { border-right: 1px solid var(--line); padding: 16px; background: #12161c; }
-    section { padding: 18px; }
-    h1, h2 { margin: 0; letter-spacing: 0; }
-    h1 { font-size: 18px; }
-    h2 { font-size: 15px; margin-bottom: 10px; }
-    .muted { color: var(--muted); }
-    .stack { display: grid; gap: 12px; }
-    .card { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); padding: 12px; }
-    .pill { display: inline-flex; align-items: center; min-height: 22px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); font-size: 12px; }
-    .warn { color: var(--warn); }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { text-align: left; border-bottom: 1px solid var(--line); padding: 8px; vertical-align: top; }
-    th { color: var(--muted); font-weight: 600; }
-    code { color: var(--accent); overflow-wrap: anywhere; }
-    @media (max-width: 760px) { main { grid-template-columns: 1fr; } aside { border-right: 0; border-bottom: 1px solid var(--line); } }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Browser Use</title>
+<meta name="bahulam-plugin" content="browser-use">
+
+<link rel="stylesheet" href="/vendor/bahulam-plugin/bahulam-plugin.css">
+<style>
+/* browser-use specific */
+.metrics-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}@media(max-width:500px){.metrics-row{grid-template-columns:1fr}}
+</style>
 </head>
 <body>
-  <main>
-    <aside class="stack">
-      <div>
-        <h1>Browser Use</h1>
-        <div class="muted">Form-fill sessions, profiles, and approval gates.</div>
-      </div>
-      <div class="card">
-        <div class="muted">Runtime</div>
-        <div>Bahulam orchestration with local or hosted Playwright execution</div>
-      </div>
-      <div class="card">
-        <div class="muted">Guardrail</div>
-        <div class="warn">Submit-sensitive actions require explicit approval.</div>
-      </div>
-    </aside>
-    <section class="stack">
-      <div class="card">
-        <h2>How Agents Use This Panel</h2>
-        <div class="muted">The operator records browser sessions, form profiles, planned fills, screenshots, extracted data, and submit approvals into plugin state. This panel renders the action trail from that state.</div>
-      </div>
-      <div class="card">
-        <h2>Expected Tool Flow</h2>
-        <table>
-          <thead><tr><th>Step</th><th>Tool</th><th>Purpose</th></tr></thead>
-          <tbody>
-            <tr><td>1</td><td><code>browser_form_complete</code></td><td>Fast path for URL + field values: discover, profile, fill, screenshot, and submit gate.</td></tr>
-            <tr><td>2</td><td><code>browser_session_create</code></td><td>Lower-level path: track URL, purpose, and session status.</td></tr>
-            <tr><td>3</td><td><code>browser_form_discover</code></td><td>Inspect rendered controls when debugging or mapping fields.</td></tr>
-            <tr><td>4</td><td><code>form_profile_create</code></td><td>Store labels, selectors, value sources, and redactions.</td></tr>
-            <tr><td>5</td><td><code>browser_form_fill</code></td><td>Execute the approved form profile in Playwright.</td></tr>
-            <tr><td>6</td><td><code>browser_session_report</code></td><td>Summarize what happened and what remains blocked.</td></tr>
-          </tbody>
-        </table>
-      </div>
-      <div class="card">
-        <h2>Approval Model</h2>
-        <span class="pill">no silent submit</span>
-        <span class="pill">redact secrets</span>
-        <span class="pill">record every action</span>
-        <span class="pill">domain chosen by user</span>
-      </div>
-    </section>
-  </main>
+<div class="plugin-page">
+<header class="plugin-bar"><span class="brand-mark">B</span><h1>Browser Use</h1><span class="live-badge js-live">· connecting…</span></header>
+<div class="plugin-body">
+<div class="metrics-row">
+<div class="metric"><b id="totalSessions">—</b><span>Sessions</span></div>
+<div class="metric"><b id="actionsToday">—</b><span>Actions Today</span></div>
+<div class="metric"><b id="activeSessions">—</b><span>Active</span></div>
+</div>
+<div class="section-head"><h2>Recent Sessions</h2></div>
+<div class="plugin-grid" id="sessionList"><div class="empty">Loading sessions…</div></div>
+</div>
+</div>
+<script>
+(function(){var P='browser-use';
+function T(){var p=new URLSearchParams(window.location.search);return p.get('token')||''}
+var token=T();
+async function q(op,e){var r=await fetch('/api/plugin-state/'+encodeURIComponent(P),{method:'POST',headers:{'Content-Type':'application/json','X-Bahulam-Local-Token':token},body:JSON.stringify({op:op,...e})});var b=await r.json();if(!r.ok||b.ok===false)throw new Error(b.error||'state op failed');return b.result}
+function esc(s){return String(s??'').replace(/[&<>"']/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]})}
+function ft(t){if(!t)return'';try{return new Date(t).toLocaleString([],{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}catch{return String(t)}}
+var _t;
+function sub(fn){var es=new EventSource('/api/events?token='+encodeURIComponent(token));es.addEventListener('open',function(){document.querySelectorAll('.js-live').forEach(function(e){e.textContent='· live';e.classList.add('live')})});es.addEventListener('error',function(){document.querySelectorAll('.js-live').forEach(function(e){e.textContent='· reconnecting…';e.classList.remove('live')})});es.addEventListener('plugin_state_changed',function(ev){var d={};try{d=JSON.parse(ev.data||'{}')}catch(e){}if(d.plugin!==P)return;if(_t)clearTimeout(_t);_t=setTimeout(fn,200)});return function(){if(_t)clearTimeout(_t);es.close()}}
+async function load(){try{var rows=(await q('list',{stream:'sessions',limit:50,order:'desc'}))||[];var el=document.getElementById('sessionList');var act=rows.filter(function(s){return s.status==='active'||!s.status}).length;document.getElementById('totalSessions').textContent=String(rows.length);document.getElementById('activeSessions').textContent=String(act);if(!rows.length){el.innerHTML='<div class="empty">No browser sessions yet. Ask the agent to create one.</div>';return}el.innerHTML=rows.map(function(s){var u=s.url||s.target_url||'';return'<div class="card"><div class="flex items-center justify-between"><h3>'+esc(s.name||s.title||'Session')+'</h3><span class="badge '+(s.status==='completed'?'success':s.status==='error'?'error':'warn')+'">'+esc(s.status||'active')+'</span></div>'+(u?'<div class="meta truncate">'+esc(u)+'</div>':'')+(s.created_at?'<div class="meta">'+ft(s.created_at)+(s.updated_at?' · last: '+ft(s.updated_at):'')+'</div>':'')+'</div>'}).join('')}catch(e){document.getElementById('sessionList').innerHTML='<div class="empty">Could not load sessions.<br><small>'+esc(e.message)+'</small></div>'}}
+sub(load);load()})();
+</script>
 </body>
 </html>

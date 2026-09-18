@@ -4,108 +4,32 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Document Writer — References</title>
-<style>
-:root{--bg:#0f172a;--fg:#e2e8f0;--muted:#64748b;--brand:#6366f1;--border:#1e293b;--warn:#eab308;--ok:#22c55e}
-html,body{margin:0;min-height:100%;background:var(--bg);color:var(--fg);font-family:Inter,system-ui,sans-serif;font-size:13px}
-body{display:flex;flex-direction:column;min-height:100vh}
-header{padding:12px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
-h1{margin:0;font-size:14px;font-weight:600}
-select,button{background:#1e293b;color:var(--fg);border:1px solid var(--border);border-radius:5px;padding:4px 8px;font-family:inherit;font-size:12px}
-button{cursor:pointer;margin-left:auto}
-#body{flex:1;padding:14px 18px;overflow-y:auto}
-table{width:100%;border-collapse:collapse;font-size:12px}
-th{text-align:left;padding:6px 10px;border-bottom:2px solid var(--border);color:var(--muted);font-weight:500;font-size:10px;text-transform:uppercase;letter-spacing:.05em}
-td{padding:6px 10px;border-bottom:1px solid rgba(30,41,59,.5);vertical-align:top}
-code{color:var(--brand);font-family:ui-monospace,Menlo,monospace;font-size:11px}
-.badge{display:inline-block;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:500;background:rgba(99,102,241,.15);color:var(--brand)}
-.empty{padding:40px;text-align:center;color:var(--muted)}
-</style>
+<meta name="bahulam-plugin" content="document-writer">
+<link rel="stylesheet" href="/vendor/bahulam-plugin/bahulam-plugin.css">
+
 </head>
 <body>
-<header>
-  <h1>References</h1>
-  <select id="doc-picker"></select>
-  <button id="refresh">Refresh</button>
-</header>
-<div id="body">
-  <div id="empty" class="empty" style="display:none">Pick a document above.</div>
-  <div id="stats" style="margin-bottom:10px;color:var(--muted);font-size:11px"></div>
-  <table id="table">
-    <thead><tr><th>id</th><th>type</th><th>title</th><th>year</th><th>DOI</th></tr></thead>
-    <tbody id="rows"></tbody>
-  </table>
+<div class="plugin-page">
+<header class="plugin-bar"><span class="brand-mark">B</span><h1>References</h1><div class="flex items-center gap-1" style="margin-left:auto"><select id="doc-picker"></select></div></header>
+<div class="plugin-body">
+<div id="empty" class="empty" style="display:none">Pick a document above.</div>
+<div id="stats" class="small muted mb-1"></div>
+<table class="plugin-table" id="table">
+<thead><tr><th>ID</th><th>Type</th><th>Title</th><th>Year</th><th>DOI</th></tr></thead>
+<tbody id="rows"></tbody>
+</table>
+</div>
 </div>
 <script>
-const TOKEN = new URLSearchParams(location.search).get('token') || '';
-const PLUGIN = 'document-writer';
-const headers = { 'Content-Type': 'application/json', ...(TOKEN ? { 'X-Bahulam-Local-Token': TOKEN } : {}) };
-let docs = [];
-let currentSlug = null;
-
-async function fetchDocs() {
-  try {
-    const res = await fetch(`/api/plugin-state/${PLUGIN}`, { method: 'POST', headers, body: JSON.stringify({ op: 'list', stream: 'documents', limit: 50 }) });
-    if (!res.ok) return [];
-    const body = await res.json();
-    return (body?.result ?? []).filter(r => r.slug || r.name);
-  } catch { return []; }
-}
-
-async function fetchDsl(slug) {
-  const row = docs.find(r => (r.slug || r.name) === slug);
-  if (!row?.dsl_path) return null;
-  try {
-    const r = await fetch(`/api/files?token=${encodeURIComponent(TOKEN)}&path=${encodeURIComponent(row.dsl_path)}`);
-    if (!r.ok) return null;
-    const b = await r.json();
-    return JSON.parse(b?.preview?.content || '{}');
-  } catch { return null; }
-}
-
-function renderRefs(dsl) {
-  const rows = document.getElementById('rows');
-  const stats = document.getElementById('stats');
-  const empty = document.getElementById('empty');
-  if (!dsl) { rows.innerHTML = ''; stats.textContent = ''; empty.style.display = ''; return; }
-  empty.style.display = 'none';
-  const refs = dsl.references || {};
-  const entries = Object.entries(refs);
-  stats.textContent = `${entries.length} reference${entries.length === 1 ? '' : 's'} · bib style: ${dsl.meta?.bib_style || '(default)'}`;
-  rows.innerHTML = entries.map(([id, r]) => {
-    const f = r.fields || {};
-    const title = f.title || '';
-    return `<tr>
-      <td><code>${id}</code></td>
-      <td><span class="badge">${r.type || 'misc'}</span></td>
-      <td>${title}</td>
-      <td>${f.year || ''}</td>
-      <td>${f.doi ? `<a href="https://doi.org/${f.doi}" target="_blank">${f.doi}</a>` : ''}</td>
-    </tr>`;
-  }).join('');
-}
-
-async function refresh() {
-  docs = await fetchDocs();
-  const picker = document.getElementById('doc-picker');
-  const prev = picker.value || currentSlug;
-  picker.innerHTML = ['<option value="">— pick document —</option>']
-    .concat(docs.map(r => `<option value="${r.slug || r.name}">${r.slug || r.name}</option>`))
-    .join('');
-  if (prev && docs.some(r => (r.slug || r.name) === prev)) {
-    picker.value = prev;
-    currentSlug = prev;
-    renderRefs(await fetchDsl(prev));
-  } else {
-    renderRefs(null);
-  }
-}
-
-document.getElementById('doc-picker').addEventListener('change', async (e) => {
-  currentSlug = e.target.value;
-  renderRefs(await fetchDsl(currentSlug));
-});
-document.getElementById('refresh').addEventListener('click', refresh);
-window.addEventListener('message', (e) => { if (e.data?.type === 'plugin_state_changed') refresh(); });
+var token=new URLSearchParams(location.search).get('token')||'',PLUGIN='document-writer';
+function esc(s){return String(s??'').replace(/[&<>"']/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]})}
+var docs=[],currentSlug=null;
+async function fetchDocs(){try{var r=await fetch('/api/plugin-state/'+PLUGIN,{method:'POST',headers:{'Content-Type':'application/json','X-Bahulam-Local-Token':token},body:JSON.stringify({op:'list',stream:'documents',limit:50})});if(!r.ok)return[];return(await r.json())?.result??[]}catch(e){return[]}}
+async function fetchDsl(slug){var row=docs.find(function(r){return(r.slug||r.name)===slug});if(!row?.dsl_path)return null;try{var r=await fetch('/api/files?token='+encodeURIComponent(token)+'&path='+encodeURIComponent(row.dsl_path));if(!r.ok)return null;var b=await r.json();return JSON.parse(b?.preview?.content||'{}')}catch(e){return null}}
+function renderRefs(dsl){var rows=document.getElementById('rows'),stats=document.getElementById('stats'),empty=document.getElementById('empty');if(!dsl){rows.innerHTML='';stats.textContent='';empty.style.display='';return}empty.style.display='none';var refs=dsl.references||{},entries=Object.entries(refs);stats.textContent=entries.length+' reference'+(entries.length===1?'':'s')+(dsl.meta?.bib_style?' · bib: '+dsl.meta.bib_style:'');rows.innerHTML=entries.map(function(x){var id=x[0],r=x[1],f=r.fields||{};return'<tr><td><code>'+esc(id)+'</code></td><td><span class="badge primary">'+esc(r.type||'misc')+'</span></td><td>'+esc(f.title||'')+'</td><td class="muted">'+esc(''+(f.year||''))+'</td><td>'+(f.doi?'<a href="https://doi.org/'+encodeURIComponent(f.doi)+'" target="_blank">'+esc(f.doi)+'</a>':'')+'</td></tr>'}).join('')}
+async function refresh(){docs=await fetchDocs();var picker=document.getElementById('doc-picker'),prev=picker.value||currentSlug;picker.innerHTML='<option value="">— pick document —</option>'+docs.map(function(r){return'<option value="'+esc(r.slug||r.name)+'">'+esc(r.slug||r.name)+'</option>'}).join('');if(prev&&docs.some(function(r){return(r.slug||r.name)===prev})){picker.value=prev;currentSlug=prev;renderRefs(await fetchDsl(prev))}else renderRefs(null)}
+document.getElementById('doc-picker').addEventListener('change',async function(e){currentSlug=e.target.value;renderRefs(await fetchDsl(currentSlug))});
+var es=new EventSource('/api/events?token='+encodeURIComponent(token));es.addEventListener('plugin_state_changed',function(ev){var d={};try{d=JSON.parse(ev.data||'{}')}catch(e){}if(!d.plugin||d.plugin===PLUGIN)refresh()});
 refresh();
 </script>
 </body>
