@@ -20,13 +20,13 @@
       "tags": ["marketing", "campaigns", "ads", "content", "analytics", "state", "orchestration"]
     },
     {
-      "name": "content-creation",
+      "name": "document-writer",
       "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
       "ref": "main",
-      "subdir": "plugins/content-creation",
-      "description": "Multi-agent content runtime for copy, image, video, Three.js, and Manim assets with briefs, artifact tracking, background renders, review, and a live gallery",
+      "subdir": "plugins/document-writer",
+      "description": "Compositional document writer for research papers, patent applications (with USPTO XML output), technical reports, grant proposals, and literature reviews. Documents live as a JSON DSL; document.md and refs.bib are always kept in sync. Domain specialists (Source / Outline / Draft / Cite / Vision Analyst / Figure / Claim / Style / Reviewer, plus patent-only Prior Art and Claim Author) each own a slice of the DSL. Every claim traces to a source; compile refuses to emit final targets while unverified claims exist. Compile to md / tex / pdf / docx / uspto_xml. Watermark support (DRAFT / CONFIDENTIAL / auto-DRAFT when unverified claims exist) renders across every target. Zero-credential local providers for PDF text extract and reference lookup; upgrade paths for Mistral OCR and Crossref.",
       "author": "BahulamAI",
-      "tags": ["showcase", "content", "image", "video", "threejs", "manim", "async", "orchestration"]
+      "tags": ["document", "writing", "paper", "patent", "grant", "report", "citation", "bibtex", "latex", "pandoc", "dsl", "vision", "watermark"]
     },
     {
       "name": "hello-mcp",
@@ -63,6 +63,13 @@
       "description": "Raspberry Pi GPIO and I2C sensor operations runtime with local, SSH, and fully simulated virtual board targets, approval-gated GPIO writes, a live board/pin/approval panel, and datasheet-grounded LLM/OS advisor tools that recommend (never install) a software snapshot",
       "author": "Rohit",
       "tags": ["gpio", "hardware", "sensors", "ssh", "simulation", "iot", "state", "approvals", "advisor", "llm", "os"]
+      "name": "threejs-studio",
+      "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
+      "ref": "main",
+      "subdir": "plugins/threejs-studio",
+      "description": "Standalone Three.js interactive 3D studio — text-to-scene for product demos, data visualizations, architectural walkthroughs, physics simulations, generative art, and educational animations. Instant HTML output, no render pipeline.",
+      "author": "BahulamAI",
+      "tags": ["threejs", "3d", "visualization", "animation", "interactive", "webgl", "education", "product"]
     }
   ]
 }

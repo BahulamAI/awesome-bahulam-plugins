@@ -1,0 +1,19 @@
+key: nsf-grant
+name: NSF Grant Proposal
+kind_defaults: [grant]
+document_class: article
+class_options: [11pt]
+packages: [geometry, graphicx, hyperref]
+geometry: [margin=1in]
+bib_style: plain
+required_sections: [summary, objectives, background, approach, timeline, budget, impact]
+length:
+  target_pages: 15
+  hard_limit_pages: 15
+  appendix_allowed: true
+notes: |
+  NSF proposal. 15-page Project Description hard limit. Broader Impacts
+  section is required and distinct from Intellectual Merit. Budget
+  justification goes in a separate file per NSF's typical solicitation
+  requirements. References Cited section does not count toward the
+  page limit.

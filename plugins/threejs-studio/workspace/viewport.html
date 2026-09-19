@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Three.js Studio — Viewport</title>
+<style>
+:root {
+  --bg: #0f172a;
+  --fg: #e2e8f0;
+  --muted: #64748b;
+  --brand: #6366f1;
+  --ok: #22c55e;
+  --err: #ef4444;
+  --border: #1e293b;
+}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:Inter,system-ui,sans-serif;font-size:13px;overflow:hidden}
+body{display:flex;flex-direction:column}
+header{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
+#connection{width:8px;height:8px;border-radius:50%;background:var(--ok)}
+#connection.dead{background:var(--err)}
+h1{margin:0;font-size:14px;font-weight:600;letter-spacing:.01em}
+select,button{background:#1e293b;color:var(--fg);border:1px solid var(--border);border-radius:5px;padding:5px 8px;font-family:inherit;font-size:12px}
+button{cursor:pointer}
+button:hover{filter:brightness(1.15)}
+#body{flex:1;display:grid;grid-template-columns:260px 1fr;overflow:hidden}
+aside{border-right:1px solid var(--border);overflow-y:auto;padding:10px 12px}
+aside h2{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:12px 0 6px;font-weight:500}
+aside .row{padding:5px 8px;border-radius:4px;font-size:12px;line-height:1.4;font-family:ui-monospace,Menlo,monospace;color:var(--fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+aside .row.light{color:#eab308}
+aside .row.mesh{color:#38bdf8}
+aside .row.gltf{color:#a78bfa}
+aside .row.group{color:#94a3b8}
+aside .row.helper{color:var(--muted)}
+aside .row .id{font-weight:600}
+aside .row .meta{color:var(--muted);margin-left:6px;font-weight:400}
+main{position:relative;background:#020617;overflow:hidden}
+iframe{border:0;width:100%;height:100%;background:#000}
+#empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);flex-direction:column;gap:6px;text-align:center}
+.dim{color:var(--muted)}
+.hint{padding:8px 10px;background:#111827;border-radius:5px;color:var(--muted);font-size:12px;line-height:1.4}
+</style>
+</head>
+<body>
+<header>
+  <span id="connection" title="Connected"></span>
+  <h1>Three.js Studio · Viewport</h1>
+  <select id="scene-picker"></select>
+  <button id="refresh">Refresh</button>
+  <button id="open-tab" title="Open scene in a new tab">Open ↗</button>
+</header>
+<div id="body">
+  <aside>
+    <h2>Scene tree</h2>
+    <div id="tree" class="dim">(select a scene)</div>
+    <h2>Materials</h2>
+    <div id="materials" class="dim">—</div>
+    <h2>Assets</h2>
+    <div id="assets" class="dim">—</div>
+  </aside>
+  <main>
+    <iframe id="viewport" src="about:blank" title="scene viewport"></iframe>
+    <div id="empty">
+      <div>No scene selected.</div>
+      <div class="dim">Create one via the director, then pick it above.</div>
+    </div>
+  </main>
+</div>
+<script>
+const TOKEN = new URLSearchParams(location.search).get('token') || '';
+const PLUGIN = 'threejs-studio';
+const headers = { 'Content-Type': 'application/json', ...(TOKEN ? { 'X-Bahulam-Local-Token': TOKEN } : {}) };
+
+let scenes = [];
+let currentSlug = null;
+
+async function fetchScenes() {
+  try {
+    const res = await fetch(`/api/plugin-state/${PLUGIN}`, {
+      method: 'POST', headers, body: JSON.stringify({ op: 'list', stream: 'scenes', limit: 50 }),
+    });
+    if (!res.ok) return [];
+    const body = await res.json();
+    const list = body?.result ?? [];
+    // stream entries include slug/name and html_path or path
+    const seen = new Set();
+    return list.filter(r => {
+      const slug = r.slug || r.name;
+      if (!slug || seen.has(slug)) return false;
+      seen.add(slug); return true;
+    });
+  } catch { return []; }
+}
+
+async function fetchDsl(slug) {
+  // Read scene.json via a plugin state proxy if the platform exposes one.
+  // For now we ask the compiled HTML page (via its file:// URL) to send
+  // the scene JSON back on load — but simpler: derive summary from the
+  // scenes stream row.
+  return null;
+}
+
+function renderTreeFromStreamRow(row) {
+  const tree = document.getElementById('tree');
+  const mats = document.getElementById('materials');
+  const assets = document.getElementById('assets');
+  if (!row) {
+    tree.textContent = '(none)'; mats.textContent = '—'; assets.textContent = '—';
+    return;
+  }
+  // We only have the row's summary from state; keep it lightweight.
+  tree.innerHTML = `<div class="hint">Loaded: ${row.title || row.slug}</div>` +
+                   `<div class="dim" style="margin-top:6px">Path: <code>${row.html_path || row.path || ''}</code></div>`;
+  mats.innerHTML = '<div class="dim">(open dev tools on the viewport to inspect)</div>';
+  assets.innerHTML = '<div class="dim">(view scene.json alongside index.html)</div>';
+}
+
+function loadScene(slug) {
+  currentSlug = slug;
+  const row = scenes.find(r => (r.slug || r.name) === slug);
+  const viewport = document.getElementById('viewport');
+  const empty = document.getElementById('empty');
+  if (!row) { viewport.src = 'about:blank'; empty.style.display = ''; return; }
+  const html = row.html_path || row.path;
+  if (!html) { viewport.src = 'about:blank'; empty.style.display = ''; return; }
+  viewport.src = `file://${html}?t=${Date.now()}`;
+  empty.style.display = 'none';
+  renderTreeFromStreamRow(row);
+}
+
+async function refresh() {
+  scenes = await fetchScenes();
+  const picker = document.getElementById('scene-picker');
+  const prev = picker.value || currentSlug;
+  picker.innerHTML = ['<option value="">— pick scene —</option>']
+    .concat(scenes.map(r => `<option value="${r.slug || r.name}">${(r.slug || r.name)}${r.title ? ` — ${r.title}` : ''}</option>`))
+    .join('');
+  if (prev && scenes.some(r => (r.slug || r.name) === prev)) {
+    picker.value = prev;
+    loadScene(prev);
+  }
+}
+
+document.getElementById('scene-picker').addEventListener('change', (e) => loadScene(e.target.value));
+document.getElementById('refresh').addEventListener('click', refresh);
+document.getElementById('open-tab').addEventListener('click', () => {
+  const row = scenes.find(r => (r.slug || r.name) === currentSlug);
+  if (row) window.open(`file://${row.html_path || row.path}`, '_blank');
+});
+
+window.addEventListener('message', (e) => {
+  if (e.data?.type === 'plugin_state_changed') refresh();
+});
+
+refresh();
+</script>
+</body>
+</html>

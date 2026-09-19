@@ -1,0 +1,24 @@
+key: arxiv
+name: arXiv preprint
+kind_defaults: [research_paper, report, review]
+document_class: article
+class_options: [11pt]
+packages: [geometry, graphicx, hyperref, cite, amsmath, amssymb]
+geometry: [margin=1in]
+bib_style: plain
+required_sections: [abstract, introduction, conclusion]
+recommended_sections:
+  - introduction
+  - related-work
+  - method
+  - experiments
+  - results
+  - discussion
+  - conclusion
+length:
+  target_pages: null
+  hard_limit_pages: null
+notes: |
+  arXiv is the most flexible venue — no strict page limits, any
+  reasonable structure. Prefer plain BibTeX style. Include DOI/URL
+  in every reference.

@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Document Writer</title>
+<style>
+:root {
+  --bg: #0f172a;
+  --fg: #e2e8f0;
+  --muted: #64748b;
+  --ok: #22c55e;
+  --err: #ef4444;
+  --warn: #eab308;
+  --brand: #6366f1;
+  --border: #1e293b;
+}
+html,body{margin:0;min-height:100%;background:var(--bg);color:var(--fg);font-family:Inter,system-ui,sans-serif;font-size:13px}
+body{display:flex;flex-direction:column;min-height:100vh}
+header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
+h1{margin:0;font-size:15px;font-weight:600}
+#conn{width:8px;height:8px;border-radius:50%;background:var(--ok)}
+button{margin-left:auto;padding:6px 14px;background:var(--brand);color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:12px}
+#body{flex:1;padding:14px 20px;overflow-y:auto;display:grid;gap:14px;grid-template-columns:1fr}
+.doc{border:1px solid var(--border);border-radius:6px;padding:12px 14px;background:#111827}
+.doc h2{margin:0 0 6px;font-size:14px;font-weight:600}
+.doc .meta{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px}
+.doc code{color:var(--brand);font-family:ui-monospace,Menlo,monospace}
+.doc a{color:var(--brand);text-decoration:none}
+.doc a:hover{text-decoration:underline}
+table.sections{width:100%;border-collapse:collapse;margin-top:8px;font-size:12px}
+table.sections th{text-align:left;padding:4px 8px;border-bottom:1px solid var(--border);color:var(--muted);font-weight:500;font-size:10px;text-transform:uppercase;letter-spacing:.05em}
+table.sections td{padding:4px 8px;border-bottom:1px solid rgba(30,41,59,0.5);vertical-align:top}
+.wc{font-family:ui-monospace,Menlo,monospace;font-size:11px}
+.wc.under{color:var(--warn)}
+.wc.ok{color:var(--ok)}
+.wc.over{color:var(--muted)}
+.badge{display:inline-block;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:500}
+.badge.claims-ok{background:rgba(34,197,94,.15);color:var(--ok)}
+.badge.claims-warn{background:rgba(234,179,8,.2);color:var(--warn)}
+.badge.claims-err{background:rgba(239,68,68,.2);color:var(--err)}
+.stats{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;font-size:11px;color:var(--muted)}
+.stat b{color:var(--fg)}
+.empty{padding:40px;text-align:center;color:var(--muted)}
+.empty p{margin:4px 0}
+</style>
+</head>
+<body>
+<header>
+  <span id="conn" title="Connected"></span>
+  <h1>Document Writer</h1>
+  <button id="refresh">Refresh</button>
+</header>
+<div id="body">
+  <div id="empty" class="empty" style="display:none">
+    <p>No research documents yet.</p>
+    <p>Ask the director to create one — e.g. "draft a NeurIPS paper on X from these PDFs".</p>
+  </div>
+  <div id="docs"></div>
+</div>
+<script>
+const TOKEN = new URLSearchParams(location.search).get('token') || '';
+const PLUGIN = 'document-writer';
+const headers = { 'Content-Type': 'application/json', ...(TOKEN ? { 'X-Bahulam-Local-Token': TOKEN } : {}) };
+
+async function fetchDocs() {
+  try {
+    const res = await fetch(`/api/plugin-state/${PLUGIN}`, {
+      method: 'POST', headers, body: JSON.stringify({ op: 'list', stream: 'documents', limit: 50 }),
+    });
+    if (!res.ok) return [];
+    const body = await res.json();
+    const list = body?.result ?? [];
+    const seen = new Set();
+    return list.filter(r => {
+      const slug = r.slug || r.name;
+      if (!slug || seen.has(slug)) return false;
+      seen.add(slug); return true;
+    });
+  } catch { return []; }
+}
+
+function wcClass(actual, target) {
+  if (!target) return 'ok';
+  const ratio = actual / target;
+  if (ratio < 0.5) return 'under';
+  if (ratio > 1.5) return 'over';
+  return 'ok';
+}
+
+function claimBadge(count, unsupported) {
+  if (!count) return '';
+  if (!unsupported) return `<span class="badge claims-ok">${count} claims ok</span>`;
+  const cls = unsupported === count ? 'claims-err' : 'claims-warn';
+  return `<span class="badge ${cls}">${unsupported}/${count} claims unverified</span>`;
+}
+
+function renderDoc(row) {
+  const slug = row.slug || row.name;
+  const title = row.title || slug;
+  const md = row.md_path || row.path || '';
+  const kind = row.kind || '';
+  const venue = row.venue || '';
+  const wc = row.word_count || 0;
+  const created = row.created_at ? new Date(row.created_at).toLocaleString() : '';
+  return `<div class="doc">
+    <div class="meta">${kind}${venue ? ` · ${venue}` : ''}${created ? ` · ${created}` : ''}</div>
+    <h2>${title} <code>${slug}</code></h2>
+    <div class="stats">
+      <span class="stat"><b>${wc}</b> words</span>
+      ${md ? `<span class="stat"><a href="file://${md}" target="_blank">document.md</a></span>` : ''}
+    </div>
+  </div>`;
+}
+
+function render(rows) {
+  const empty = document.getElementById('empty');
+  const docs = document.getElementById('docs');
+  if (!rows.length) { empty.style.display = ''; docs.innerHTML = ''; return; }
+  empty.style.display = 'none';
+  docs.innerHTML = rows.map(renderDoc).join('');
+}
+
+fetchDocs().then(render);
+window.addEventListener('message', (e) => {
+  if (e.data?.type === 'plugin_state_changed') fetchDocs().then(render);
+});
+document.getElementById('refresh').addEventListener('click', () => fetchDocs().then(render));
+</script>
+</body>
+</html>

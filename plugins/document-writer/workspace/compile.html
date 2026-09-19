@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Document Writer — Compilations</title>
+<style>
+:root{--bg:#0f172a;--fg:#e2e8f0;--muted:#64748b;--brand:#6366f1;--border:#1e293b;--ok:#22c55e;--err:#ef4444;--warn:#eab308}
+html,body{margin:0;min-height:100%;background:var(--bg);color:var(--fg);font-family:Inter,system-ui,sans-serif;font-size:13px}
+body{display:flex;flex-direction:column;min-height:100vh}
+header{padding:12px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
+h1{margin:0;font-size:14px;font-weight:600}
+button{margin-left:auto;padding:5px 12px;background:var(--brand);color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:12px}
+#body{flex:1;padding:14px 18px;overflow-y:auto}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{text-align:left;padding:6px 10px;border-bottom:2px solid var(--border);color:var(--muted);font-weight:500;font-size:10px;text-transform:uppercase;letter-spacing:.05em}
+td{padding:6px 10px;border-bottom:1px solid rgba(30,41,59,.5);vertical-align:top}
+.badge{display:inline-block;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:500}
+.badge.md{background:rgba(99,102,241,.15);color:var(--brand)}
+.badge.tex{background:rgba(34,197,94,.15);color:var(--ok)}
+.badge.pdf{background:rgba(239,68,68,.15);color:var(--err)}
+.badge.docx{background:rgba(234,179,8,.2);color:var(--warn)}
+.badge.uspto_xml{background:rgba(168,85,247,.15);color:#c084fc}
+.status.ok{color:var(--ok)}
+.status.error{color:var(--err)}
+.status.skipped{color:var(--warn)}
+a{color:var(--brand);text-decoration:none}
+a:hover{text-decoration:underline}
+code{color:var(--muted);font-family:ui-monospace,Menlo,monospace;font-size:11px}
+.empty{padding:40px;text-align:center;color:var(--muted)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Compilations</h1>
+  <button id="refresh">Refresh</button>
+</header>
+<div id="body">
+  <div id="empty" class="empty" style="display:none">
+    No compilations yet. Ask the director to compile a target (md / tex / pdf / docx / uspto_xml).
+  </div>
+  <table id="table">
+    <thead><tr><th>doc</th><th>target</th><th>status</th><th>when</th><th>path</th><th>notes</th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+</div>
+<script>
+const TOKEN = new URLSearchParams(location.search).get('token') || '';
+const PLUGIN = 'document-writer';
+const headers = { 'Content-Type': 'application/json', ...(TOKEN ? { 'X-Bahulam-Local-Token': TOKEN } : {}) };
+
+async function fetchCompilations() {
+  try {
+    const res = await fetch(`/api/plugin-state/${PLUGIN}`, { method: 'POST', headers, body: JSON.stringify({ op: 'list', stream: 'compilations', limit: 100 }) });
+    if (!res.ok) return [];
+    const body = await res.json();
+    return body?.result ?? [];
+  } catch { return []; }
+}
+
+function render(list) {
+  const rows = document.getElementById('rows');
+  const empty = document.getElementById('empty');
+  const items = Array.isArray(list) ? list : [];
+  if (!items.length) { rows.innerHTML = ''; empty.style.display = ''; return; }
+  empty.style.display = 'none';
+  rows.innerHTML = items.slice().reverse().map(r => {
+    const when = r.at || r.created_at || '';
+    const badge = `<span class="badge ${r.target}">${r.target}</span>`;
+    const status = `<span class="status ${r.status}">${r.status}</span>`;
+    const link = r.output_path ? `<a href="file://${r.output_path}" target="_blank">open</a>` : '';
+    return `<tr>
+      <td><code>${r.slug || ''}</code></td>
+      <td>${badge}</td>
+      <td>${status}</td>
+      <td><code>${when ? new Date(when).toLocaleTimeString() : ''}</code></td>
+      <td>${link}</td>
+      <td style="color:var(--muted)">${r.notes || ''}</td>
+    </tr>`;
+  }).join('');
+}
+
+fetchCompilations().then(render);
+window.addEventListener('message', (e) => { if (e.data?.type === 'plugin_state_changed') fetchCompilations().then(render); });
+document.getElementById('refresh').addEventListener('click', () => fetchCompilations().then(render));
+</script>
+</body>
+</html>

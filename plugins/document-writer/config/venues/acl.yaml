@@ -1,0 +1,26 @@
+key: acl
+name: ACL / EMNLP / NAACL (ACLPUB)
+kind_defaults: [research_paper]
+document_class: article
+class_options: [11pt, a4paper]
+packages: [acl, graphicx, hyperref, cite, natbib]
+bib_style: acl_natbib
+required_sections: [abstract, introduction, conclusion, references, limitations]
+recommended_sections:
+  - introduction
+  - related-work
+  - method
+  - experiments
+  - results
+  - discussion
+  - conclusion
+  - limitations
+  - ethics-statement
+length:
+  target_pages: 8
+  hard_limit_pages: 8
+  appendix_allowed: true
+notes: |
+  ACL-style natbib citations (\citep, \citet). Limitations section
+  required. Ethics statement encouraged. Anonymized during review.
+  Bibliography does not count toward page limit.
