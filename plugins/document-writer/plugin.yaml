@@ -20,8 +20,26 @@ metadata:
 
 config:
   requirements:
-    system: []                        # pandoc + pdflatex optional for pdf output
-    env: []                           # provider keys optional
+    system:
+      - name: pandoc
+        optional: true
+        reason: "Required for `pdf` and `docx` compile targets. Markdown / LaTeX / USPTO XML work without it."
+        install_hints:
+          darwin: "brew install pandoc"
+          linux: "apt install -y pandoc"
+          win32: "choco install pandoc"
+      - name: pdflatex
+        optional: true
+        reason: "Required for high-quality PDF output (pandoc falls back to a lower-fidelity engine without it)."
+        install_hints:
+          darwin: "brew install --cask basictex"
+          linux: "apt install -y texlive-latex-recommended"
+          win32: "choco install miktex"
+    env:
+      - name: MISTRAL_API_KEY
+        optional: true
+        credential: true
+        reason: "Only needed when RESEARCH_PDF_PROVIDER=mistral for figure-aware PDF ingest. Local pdf-parse-lite fallback needs nothing."
     filesystem: []
 
   state:

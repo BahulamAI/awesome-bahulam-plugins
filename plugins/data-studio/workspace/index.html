@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Data Studio</title>
+<meta name="bahulam-plugin" content="data-studio">
+<link rel="stylesheet" href="/vendor/bahulam-plugin/bahulam-plugin.css">
+<style>
+.layout{display:grid;grid-template-columns:260px 1fr;gap:14px;min-height:calc(100vh - 76px)}@media(max-width:680px){.layout{grid-template-columns:1fr}}
+.sidebar{border:1px solid var(--ws-border);border-radius:var(--ws-radius-md);background:var(--ws-panel);overflow:hidden;align-self:start}
+.sidebar h2{margin:0;padding:10px 12px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--ws-faint);border-bottom:1px solid var(--ws-border-subtle)}
+.sidebar-list{list-style:none;margin:0;padding:6px}
+.sidebar-list li{padding:7px 8px;font-size:12px;border-radius:var(--ws-radius-sm);cursor:default;display:flex;justify-content:space-between;align-items:center}
+.sidebar-list li:hover{background:var(--ws-hover)}
+.sidebar-list .ds-name{font-weight:500;color:var(--ws-fg)}
+.sidebar-list .ds-meta{font-size:10px;color:var(--ws-muted)}
+.sidebar-list .empty-msg{color:var(--ws-faint);font-size:11px;font-style:italic;text-align:center;padding:20px 0}
+.main-pane{padding:0 0 20px}
+.metrics-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:14px}
+.tool-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;margin-top:8px}
+.tool-chip{display:block;padding:8px 10px;border:1px solid var(--ws-border);border-radius:var(--ws-radius-sm);font-size:11px;color:var(--ws-fg);background:var(--ws-surface);cursor:default;text-decoration:none}
+.tool-chip:hover{background:var(--ws-hover);border-color:var(--ws-primary)}
+.tool-chip code{display:block;font-size:10px;color:var(--ws-muted);margin-top:2px}
+.table-wrap{overflow-x:auto;margin-top:8px;border:1px solid var(--ws-border);border-radius:var(--ws-radius-md)}
+.table-wrap table{width:100%;border-collapse:collapse;font-size:11px}
+.table-wrap th{background:var(--ws-surface);padding:6px 8px;text-align:left;font-weight:600;border-bottom:1px solid var(--ws-border);white-space:nowrap;color:var(--ws-muted)}
+.table-wrap td{padding:5px 8px;border-bottom:1px solid var(--ws-border-subtle);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.table-wrap tr:last-child td{border-bottom:none}
+.type-badge{display:inline-block;padding:1px 6px;border-radius:3px;font-size:9px;font-weight:600;text-transform:uppercase}
+.type-badge.int{background:var(--ws-primary-soft);color:var(--ws-primary)}
+.type-badge.float{background:rgba(5,150,105,.10);color:#059669}
+.type-badge.str{background:rgba(124,58,237,.10);color:#7C3AED}
+.type-badge.date{background:rgba(217,119,6,.10);color:#D97706}
+</style>
+</head>
+<body>
+<div class="plugin-page">
+<header class="plugin-bar"><span class="brand-mark">B</span><h1>Data Studio</h1><span class="live-badge js-live">· connecting…</span></header>
+<div class="plugin-body">
+<div id="empty" class="empty" style="display:none">
+  No datasets loaded yet.<br>
+  <small>Ask the data analyst to load a CSV, JSON, or JSONL — e.g. "load sales.csv and show me a summary".</small>
+</div>
+<div class="layout" id="layout" style="display:none">
+  <aside class="sidebar" id="sidebar"><h2>Datasets</h2><ul class="sidebar-list" id="ds-list"></ul></aside>
+  <section class="main-pane" id="main"><!-- populated by renderDataset() --></section>
+</div>
+</div>
+</div>
+<script>
+var token = new URLSearchParams(location.search).get('token') || '',
+    PLUGIN = 'data-studio',
+    datasets = {};
+
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c] }) }
+function typeClass(t) { return t === 'integer' ? 'int' : t === 'float' ? 'float' : t === 'date' ? 'date' : 'str' }
+
+async function fetchState(op) {
+  try {
+    var r = await fetch('/api/plugin-state/' + PLUGIN, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Bahulam-Local-Token': token },
+      body: JSON.stringify(op)
+    });
+    if (!r.ok) return null;
+    return await r.json();
+  } catch(e) { return null }
+}
+
+function renderDataset(name, ds) {
+  if (!ds || !ds.data || !ds.data.length) {
+    document.getElementById('main').innerHTML = '<p class="muted">Empty dataset.</p>';
+    return;
+  }
+  var cols = Object.keys(ds.data[0]);
+  var html = '<div class="metrics-row">' +
+    '<div class="metric"><span class="metric-value">' + ds.data.length + '</span><span class="metric-label">rows</span></div>' +
+    '<div class="metric"><span class="metric-value">' + cols.length + '</span><span class="metric-label">columns</span></div>' +
+    '<div class="metric"><span class="metric-value" style="font-size:10px">' + esc(name) + '</span><span class="metric-label">dataset</span></div>' +
+    '</div>';
+
+  // Table
+  html += '<div class="table-wrap"><table><thead><tr>' +
+    cols.map(function(c){ return '<th>' + esc(c) + '</th>' }).join('') +
+    '</tr></thead><tbody>';
+  var sample = ds.data.slice(0, 20);
+  sample.forEach(function(row){
+    html += '<tr>' + cols.map(function(c){ return '<td title="' + esc(String(row[c] ?? '')) + '">' + esc(String(row[c] ?? '')).slice(0, 60) + '</td>' }).join('') + '</tr>';
+  });
+  if (ds.data.length > 20) html += '<tr><td colspan="' + cols.length + '" style="text-align:center;color:var(--ws-faint);padding:10px">… ' + (ds.data.length - 20) + ' more rows</td></tr>';
+  html += '</tbody></table></div>';
+
+  // Tool shortcuts
+  html += '<h3 style="margin:16px 0 4px;font-size:12px;font-weight:600">Analysis tools</h3>' +
+    '<div class="tool-grid">' +
+    '<a class="tool-chip" href="#" onclick="return suggest(\'describe_stats\',\'' + esc(name) + '\')"><b>📊 Describe</b><code>describe_stats</code></a>' +
+    '<a class="tool-chip" href="#" onclick="return suggest(\'filter_rows\',\'' + esc(name) + '\')"><b>🔍 Filter</b><code>filter_rows</code></a>' +
+    '<a class="tool-chip" href="#" onclick="return suggest(\'group_aggregate\',\'' + esc(name) + '\')"><b>📈 Group & Aggregate</b><code>group_aggregate</code></a>' +
+    '<a class="tool-chip" href="#" onclick="return suggest(\'detect_outliers\',\'' + esc(name) + '\')"><b>⚠️ Outliers</b><code>detect_outliers</code></a>' +
+    '<a class="tool-chip" href="#" onclick="return suggest(\'generate_chart\',\'' + esc(name) + '\')"><b>🎨 Chart</b><code>generate_chart</code></a>' +
+    '<a class="tool-chip" href="#" onclick="return suggest(\'generate_report\',\'' + esc(name) + '\')"><b>📝 Report</b><code>generate_report</code></a>' +
+    '</div>';
+
+  document.getElementById('main').innerHTML = html;
+}
+
+function suggest(tool, dsName) {
+  var prompts = {
+    describe_stats: 'run describe_stats on "' + dsName + '" and show me the summary',
+    filter_rows: 'filter "' + dsName + '" where a numeric column > some value and show me the result',
+    group_aggregate: 'group "' + dsName + '" by a category column with an aggregation like sum or avg',
+    detect_outliers: 'detect outliers in "' + dsName + '" on the main numeric column',
+    generate_chart: 'create a bar chart from "' + dsName + '" using the category column as x and a numeric as y',
+    generate_report: 'generate a full analysis report for "' + dsName + '" with overview, stats, missing values, distributions, and correlations'
+  };
+  // Copy to clipboard and notify
+  var text = prompts[tool] || tool;
+  navigator.clipboard.writeText(text).then(function(){
+    // Show a small toast
+    var t = document.createElement('div');
+    t.textContent = '💡 Copied: "' + text + '" — paste this in chat';
+    t.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ws-fg);color:var(--ws-bg);padding:8px 16px;border-radius:var(--ws-radius-md);font-size:12px;z-index:999;box-shadow:0 4px 12px rgba(0,0,0,.15)';
+    document.body.appendChild(t);
+    setTimeout(function(){ t.remove() }, 3000);
+  }).catch(function(){});
+  return false;
+}
+
+function renderSidebar() {
+  var list = document.getElementById('ds-list');
+  var names = Object.keys(datasets);
+  if (!names.length) {
+    list.innerHTML = '<li class="empty-msg">No datasets loaded</li>';
+    document.getElementById('empty').style.display = '';
+    document.getElementById('layout').style.display = 'none';
+    return;
+  }
+  document.getElementById('empty').style.display = 'none';
+  document.getElementById('layout').style.display = '';
+  list.innerHTML = names.map(function(n){
+    var ds = datasets[n];
+    var rows = ds && ds.data ? ds.data.length : 0;
+    return '<li onclick="renderDataset(\'' + esc(n) + '\', datasets[\'' + esc(n) + '\'])" style="cursor:pointer">' +
+      '<span class="ds-name">' + esc(n) + '</span> <span class="ds-meta">' + rows + ' rows</span></li>';
+  }).join('');
+  // Select first
+  if (names.length) renderDataset(names[0], datasets[names[0]]);
+}
+
+async function load() {
+  // Fetch all datasets from the store via plugin state
+  var res = await fetchState({ op: 'list', stream: 'data-studio-datasets', limit: 50 });
+  if (!res || !res.result) { datasets = {}; renderSidebar(); return; }
+  // Reconstruct from tool output — datasets are stored in memory, not server-side
+  // We use a lightweight approach: the agent logs dataset creation, we show a fallback
+  datasets = {};
+  renderSidebar();
+}
+
+var es = new EventSource('/api/events?token=' + encodeURIComponent(token));
+es.addEventListener('open', function(){ document.querySelectorAll('.js-live').forEach(function(e){ e.textContent = '· live'; e.classList.add('live') }) });
+es.addEventListener('error', function(){ document.querySelectorAll('.js-live').forEach(function(e){ e.textContent = '· reconnecting…'; e.classList.remove('live') }) });
+es.addEventListener('plugin_state_changed', function(ev){
+  var d = {};
+  try { d = JSON.parse(ev.data || '{}'); } catch(e) {}
+  if (!d.plugin || d.plugin === PLUGIN) load();
+});
+load();
+</script>
+</body>
+</html>

@@ -65,7 +65,8 @@ export async function call(args = {}, options = {}) {
     const outFile = `document.${target}`;
     const outPath = path.join(paths.exports, outFile);
     fs.mkdirSync(paths.exports, { recursive: true });
-    const which = spawnSync('which', ['pandoc'], { encoding: 'utf-8' });
+    const probeCmd = process.platform === 'win32' ? 'where' : 'which';
+    const which = spawnSync(probeCmd, ['pandoc'], { encoding: 'utf-8' });
     if (which.status !== 0) {
       const msg = `pandoc not found on PATH — install pandoc to compile ${target}, or use target: "md" / "tex".`;
       recordCompile(state, slug, target, outPath, 'skipped', msg);
