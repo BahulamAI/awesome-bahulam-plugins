@@ -1,0 +1,112 @@
+{
+  "version": 1,
+  "analyzed_at": "2026-09-18T16:02:44.375Z",
+  "files_scanned": 53,
+  "truncated": false,
+  "system_binaries": [
+    {
+      "name": "pandoc",
+      "install_hints": {
+        "darwin": "brew install pandoc",
+        "linux": "apt install -y pandoc",
+        "win32": "choco install pandoc"
+      },
+      "seen_in": [
+        "tools/compile-document.mjs",
+        "plugin.yaml:config.requirements.system"
+      ],
+      "version": null,
+      "reason": "Required for `pdf` and `docx` compile targets. Markdown / LaTeX / USPTO XML work without it.",
+      "optional": true
+    },
+    {
+      "name": "pdflatex",
+      "install_hints": {
+        "darwin": "brew install --cask basictex",
+        "linux": "apt install -y texlive-latex-recommended",
+        "win32": "choco install miktex"
+      },
+      "seen_in": [
+        "plugin.yaml:config.requirements.system"
+      ],
+      "version": null,
+      "reason": "Required for high-quality PDF output (pandoc falls back to a lower-fidelity engine without it).",
+      "optional": true
+    }
+  ],
+  "env_vars": [
+    {
+      "name": "ANTHROPIC_API_KEY",
+      "credential": true,
+      "seen_in": [
+        "selftest.mjs"
+      ]
+    },
+    {
+      "name": "FAL_KEY",
+      "credential": true,
+      "seen_in": [
+        "selftest.mjs"
+      ]
+    },
+    {
+      "name": "MISTRAL_API_KEY",
+      "credential": true,
+      "seen_in": [
+        "selftest.mjs",
+        "tools/providers/pdf-mistral.mjs",
+        "plugin.yaml:config.requirements.env"
+      ],
+      "optional": true,
+      "reason": "Only needed when RESEARCH_PDF_PROVIDER=mistral for figure-aware PDF ingest. Local pdf-parse-lite fallback needs nothing."
+    },
+    {
+      "name": "MISTRAL_OCR_ENDPOINT",
+      "credential": false,
+      "seen_in": [
+        "tools/providers/pdf-mistral.mjs"
+      ]
+    },
+    {
+      "name": "OPENAI_API_KEY",
+      "credential": true,
+      "seen_in": [
+        "selftest.mjs"
+      ]
+    },
+    {
+      "name": "OPENROUTER_API_KEY",
+      "credential": true,
+      "seen_in": [
+        "selftest.mjs"
+      ]
+    },
+    {
+      "name": "RESEARCH_CROSSREF_EMAIL",
+      "credential": false,
+      "seen_in": [
+        "tools/providers/ref-crossref.mjs"
+      ]
+    },
+    {
+      "name": "RESEARCH_OFFLINE",
+      "credential": false,
+      "seen_in": [
+        "selftest.mjs",
+        "tools/providers/ref-crossref.mjs"
+      ]
+    }
+  ],
+  "workspace_scoped_paths": false,
+  "engines": null,
+  "os": null,
+  "cpu": null,
+  "readme_sections": [
+    {
+      "title": "Prerequisites",
+      "body": "- Node.js (implicit from the CLI runtime).\n- Optional: `pandoc` + `pdflatex` for PDF export (LaTeX target works without).\n- Optional API keys for real providers:\n  - `MISTRAL_API_KEY` — layout-aware PDF extraction (`RESEARCH_PDF_PROVIDER=mistral`).\n  - `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` — vision-capable gateway for figure descriptions / claim verification (the Vision Analyst agent picks the model via its own gateway config, not through a tool)."
+    }
+  ],
+  "skills_available": [],
+  "tool_constraints": {}
+}

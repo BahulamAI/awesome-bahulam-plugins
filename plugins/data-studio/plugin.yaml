@@ -1,0 +1,359 @@
+apiVersion: bahulam.plugin/1
+kind: Plugin
+metadata:
+  name: data-studio
+  version: 0.1.0
+  description: >
+    Data Studio — load, transform, analyze, visualize, and export
+    structured data from CSV, JSON, JSONL, or SQL sources. Supports
+    statistical summaries, filtering, grouping, aggregation, joins,
+    outlier detection, and chart generation. Designed to compose with
+    document-writer (embed reports) and threejs-studio (3D chart
+    overlays) in a single agent session.
+  author: BahulamAI
+  repository: https://github.com/BahulamAI/awesome-bahulam-plugins
+
+config:
+  requirements:
+    env: []
+    network: []
+
+# ── Tools ──────────────────────────────────────────────────────────
+tools:
+  - name: load_dataset
+    description: >
+      Load a CSV, JSON, JSONL, or TSV file into the workspace as a
+      named dataset. Returns shape, columns with inferred types, and a
+      row sample.
+    parameters:
+      type: object
+      properties:
+        path:
+          type: string
+          description: Absolute or workspace-relative path to data file
+        name:
+          type: string
+          description: Short alias for referencing in downstream tools
+        format:
+          type: string
+          enum: [auto, csv, tsv, json, jsonl]
+          description: Override auto-detection
+      required: [path]
+    tool: data-studio/tools/load-dataset.mjs
+
+  - name: inspect_data
+    description: >
+      Return column names, inferred data types, non-null counts, unique
+      value counts, and a configurable number of sample rows.
+    parameters:
+      type: object
+      properties:
+        dataset:
+          type: string
+          description: Dataset name returned by load_dataset
+        rows:
+          type: integer
+          description: Number of sample rows to show (default 5)
+      required: [dataset]
+    tool: data-studio/tools/inspect-data.mjs
+
+  - name: describe_stats
+    description: >
+      Statistical summary for numeric columns: count, mean, median, std,
+      min, max, Q1, Q3, missing%. For categorical: count, unique, top,
+      freq.
+    parameters:
+      type: object
+      properties:
+        dataset:
+          type: string
+          description: Dataset name
+        columns:
+          type: array
+          items:
+            type: string
+          description: 'Specific columns (default: all)'
+      required: [dataset]
+    tool: data-studio/tools/describe-stats.mjs
+
+  - name: filter_rows
+    description: >
+      Filter a dataset by column-operator-value expressions. Supports
+      and/or logic.
+    parameters:
+      type: object
+      properties:
+        dataset:
+          type: string
+          description: Source dataset name
+        conditions:
+          type: array
+          description: >
+            Filter conditions, AND-ed together. Each condition is
+            {column, op, value}. Supported ops: eq, ne, gt, gte, lt,
+            lte, contains, regex
+          items:
+            type: object
+            properties:
+              column:
+                type: string
+              op:
+                type: string
+                enum: [eq, ne, gt, gte, lt, lte, contains, regex, in, not_in]
+              value:
+                description: Comparison value (string/number/array for in/not_in)
+            required: [column, op, value]
+        name:
+          type: string
+          description: "Output dataset name (default: dataset + '_filtered')"
+      required: [dataset, conditions]
+    tool: data-studio/tools/filter-rows.mjs
+
+  - name: group_aggregate
+    description: >
+      Group by one or more columns and compute aggregations (sum, avg,
+      count, min, max, std, first, last).
+    parameters:
+      type: object
+      properties:
+        dataset:
+          type: string
+          description: Source dataset name
+        by:
+          type: array
+          items:
+            type: string
+          description: Column(s) to group by
+        aggregations:
+          type: array
+          description: >
+            List of {column, as, fn}. fn is one of: sum, avg, count, min,
+            max, std, first, last
+          items:
+            type: object
+            properties:
+              column:
+                type: string
+              as:
+                type: string
+                description: Output column name
+              fn:
+                type: string
+                enum: [sum, avg, count, min, max, std, first, last]
+            required: [column, as, fn]
+        name:
+          type: string
+          description: Output dataset name
+      required: [dataset, by, aggregations]
+    tool: data-studio/tools/group-aggregate.mjs
+
+  - name: sort_data
+    description: >
+      Sort a dataset by one or more columns, ascending or descending.
+    parameters:
+      type: object
+      properties:
+        dataset:
+          type: string
+          description: Source dataset name
+        sort:
+          type: array
+          description: >
+            [{column: "x", direction: "asc"}] — direction defaults to asc
+          items:
+            type: object
+            properties:
+              column:
+                type: string
+              direction:
+                type: string
+                enum: [asc, desc]
+            required: [column]
+        name:
+          type: string
+          description: Output dataset name
+      required: [dataset, sort]
+    tool: data-studio/tools/sort-data.mjs
+
+  - name: select_columns
+    description: >
+      Project a subset of columns from a dataset. Optionally rename.
+    parameters:
+      type: object
+      properties:
+        dataset:
+          type: string
+          description: Source dataset name
+        columns:
+          type: array
+          description: >
+            Column names to keep, or [{from, to}] for renaming
+          items:
+            oneOf:
+              - type: string
+              - type: object
+                properties:
+                  from:
+                    type: string
+                  to:
+                    type: string
+                required: [from, to]
+        name:
+          type: string
+          description: "Output dataset name (default: dataset + '_projected')"
+      required: [dataset, columns]
+    tool: data-studio/tools/select-columns.mjs
+
+  - name: join_datasets
+    description: >
+      Merge two datasets on a common key column (inner, left, right, or
+      outer join).
+    parameters:
+      type: object
+      properties:
+        left:
+          type: string
+          description: Left dataset name
+        right:
+          type: string
+          description: Right dataset name
+        on:
+          description: >
+            Column name to join on, or [{left: "a", right: "b"}] for
+            different column names
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: object
+                properties:
+                  left:
+                    type: string
+                  right:
+                    type: string
+                required: [left, right]
+        how:
+          type: string
+          enum: [inner, left, right, outer]
+          description: "Join type (default: inner)"
+        name:
+          type: string
+          description: Output dataset name
+      required: [left, right, on]
+    tool: data-studio/tools/join-datasets.mjs
+
+  - name: detect_outliers
+    description: >
+      Flag numeric outliers using IQR (Tukey) or z-score method.
+      Returns a new column with boolean flag.
+    parameters:
+      type: object
+      properties:
+        dataset:
+          type: string
+          description: Source dataset name
+        column:
+          type: string
+          description: Numeric column to check
+        method:
+          type: string
+          enum: [iqr, zscore]
+          description: "IQR threshold=1.5, zscore threshold=3 (default: iqr)"
+        threshold:
+          type: number
+          description: Override default thresholds (IQR multiplier or z-score cutoff)
+        name:
+          type: string
+          description: Output dataset name
+      required: [dataset, column]
+    tool: data-studio/tools/detect-outliers.mjs
+
+  - name: generate_chart
+    description: >
+      Return an HTML chart spec for a dataset. The workspace view
+      renders it as an inline chart. Supports bar, line, scatter, pie,
+      histogram, box, heatmap.
+    parameters:
+      type: object
+      properties:
+        dataset:
+          type: string
+          description: Dataset name to chart
+        type:
+          type: string
+          enum: [bar, line, scatter, pie, histogram, box, heatmap]
+          description: Chart type
+        x:
+          type: string
+          description: Column for x-axis / categories
+        y:
+          type: string
+          description: Column(s) for y-axis / values — comma-separated for multi-series
+        series:
+          type: string
+          description: Optional column for color/series grouping
+        title:
+          type: string
+          description: Chart title
+        width:
+          type: integer
+          description: Chart pixel width (default 600)
+        height:
+          type: integer
+          description: Chart pixel height (default 380)
+        options:
+          type: object
+          description: Additional chart options
+      required: [dataset, type, x, y]
+    tool: data-studio/tools/generate-chart.mjs
+
+  - name: generate_report
+    description: >
+      Produce a markdown analysis report from a dataset summary and
+      optional narrative. The report can be passed to document-writer
+      for further formatting.
+    parameters:
+      type: object
+      properties:
+        dataset:
+          type: string
+          description: Source dataset name
+        title:
+          type: string
+          description: Report title
+        sections:
+          type: array
+          description: >
+            Report sections to include. Options: overview, stats,
+            missing, outliers, distributions, correlations, custom
+          items:
+            type: string
+          default: [overview, stats, missing, distributions]
+        notes:
+          type: string
+          description: Free-text analysis notes to embed
+        format:
+          type: string
+          enum: [markdown, json]
+          description: "Output format (default: markdown)"
+      required: [dataset, title]
+    tool: data-studio/tools/generate-report.mjs
+
+  - name: export_data
+    description: >
+      Write a processed dataset to disk as CSV, JSON, or JSONL.
+    parameters:
+      type: object
+      properties:
+        dataset:
+          type: string
+          description: Dataset name to export
+        path:
+          type: string
+          description: Output file path
+        format:
+          type: string
+          enum: [csv, json, jsonl]
+          description: "Output format (default: auto from extension)"
+      required: [dataset, path]
+    tool: data-studio/tools/export-data.mjs
