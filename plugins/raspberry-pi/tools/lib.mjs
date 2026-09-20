@@ -83,7 +83,7 @@ export function execSsh(client, board, cmd, args = []) {
         });
       })
       .on('error', reject)
-      .connect({ host: board.host, port: Number(board.port || 22), username: board.user, ...auth });
+      .connect({ host: board.host, port: Number(board.port || 22), username: board.user, readyTimeout: 15000, ...auth });
   });
 }
 

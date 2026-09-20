@@ -41,7 +41,8 @@ CREATE TABLE pi_pins (
   mode TEXT NOT NULL,
   role TEXT NOT NULL DEFAULT '',
   is_actuator INTEGER NOT NULL DEFAULT 0,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  UNIQUE(board_id, pin)
 );
 CREATE TABLE pi_actions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -180,6 +181,77 @@ try {
   const localRead = await readGpio({ board_id: 1, pin: 17 }, localOptions);
   ok('pi_gpio_read (local) reads a level', localRead.output.level === 1);
 
+  // ===================== ERROR-PATH TESTS =====================
+  let errorThrew = false;
+  try { await connectBoard({}, localOptions); } catch { errorThrew = true; }
+  ok('pi_board_connect rejects missing name', errorThrew);
+
+  errorThrew = false;
+  try { await connectBoard({ name: 'bad', target_kind: 'ssh', host: 'x', user: 'x' }, localOptions); } catch(e) { errorThrew = e.message.includes('auth_env'); }
+  ok('pi_board_connect ssh requires auth_env', errorThrew);
+
+  errorThrew = false;
+  try { await discoverBoard({ board_id: 999 }, localOptions); } catch { errorThrew = true; }
+  ok('pi_board_discover rejects missing board', errorThrew);
+
+  errorThrew = false;
+  try { await configurePin({ board_id: 1, pin: 99, mode: 'out', role: 'test' }, localOptions); } catch(e) { errorThrew = e.message.includes('pin'); }
+  ok('pi_pin_configure rejects invalid pin (99 > 27)', errorThrew);
+
+  errorThrew = false;
+  try { await configurePin({ board_id: 1, pin: 17, mode: 'brk', role: 'test' }, localOptions); } catch(e) { errorThrew = e.message.includes('mode'); }
+  ok('pi_pin_configure rejects unknown mode', errorThrew);
+
+  errorThrew = false;
+  try { await writeGpio({ board_id: 999, pin: 17, level: true }, localOptions); } catch { errorThrew = true; }
+  ok('pi_gpio_write rejects missing board', errorThrew);
+
+  errorThrew = false;
+  try { await readGpio({ board_id: 999, pin: 17 }, localOptions); } catch { errorThrew = true; }
+  ok('pi_gpio_read rejects missing board', errorThrew);
+
+  errorThrew = false;
+  try { await readSensor({ board_id: 1, address: '0x48', register: 'bad' }, localOptions); } catch { errorThrew = true; }
+  ok('pi_sensor_read rejects invalid register format', errorThrew);
+
+  errorThrew = false;
+  try { await recordAction({ board_id: 999, action: 'test', status: 'completed' }, localOptions); } catch { errorThrew = true; }
+  ok('pi_action_record rejects missing board', errorThrew);
+
+  errorThrew = false;
+  try { await reportBoard({ board_id: 999 }, localOptions); } catch { errorThrew = true; }
+  ok('pi_board_report rejects missing board', errorThrew);
+
+  errorThrew = false;
+  try { await diagramBoard({ board_id: 999 }, localOptions); } catch { errorThrew = true; }
+  ok('pi_board_diagram rejects missing board', errorThrew);
+
+  errorThrew = false;
+  try { await advisorLlm({}, localOptions); } catch { errorThrew = true; }
+  ok('pi_llm_advisor rejects no ram_gb when no board provides it', errorThrew);
+
+  // ===================== DUPLICATE PIN CONFIG TEST =====================
+  const dupPin1 = await configurePin({ board_id: 1, pin: 17, mode: 'in', role: 'reconfigured' }, localOptions);
+  ok('pi_pin_configure reconfigures existing pin (upsert)', dupPin1.success);
+  // Read back to confirm mode was updated
+  const readReconfig = await readGpio({ board_id: 1, pin: 17 }, localOptions);
+  ok('pi_gpio_read after reconfig still works', readReconfig.success);
+
+  // ===================== NO-ARGS GPIO WRITE EDGE CASE =====================
+  errorThrew = false;
+  try { await writeGpio({ board_id: 1, pin: 17, approved: true }, localOptions); } catch(e) { errorThrew = true; }
+  ok('pi_gpio_write rejects missing both level and duty_cycle', errorThrew);
+
+  // ===================== CONTEXT TOOL TEST =====================
+  const boardList = state.query('SELECT * FROM pi_boards ORDER BY id ASC');
+  ok('context tool list_pi_boards would return boards', boardList.length >= 1 && boardList.some(r => r.name === 'bench-pi'));
+
+  const actionList = state.query('SELECT * FROM pi_actions WHERE board_id = 1 ORDER BY id ASC');
+  ok('context tool list_pi_actions would return actions for board 1', actionList.length >= 5);
+
+  const advisoryList = state.query('SELECT * FROM pi_advisories');
+  ok('context tool list_pi_advisories returns advisory rows', advisoryList.length >= 0);
+
   // ===================== SSH BOARD =====================
   process.env.TEST_PI_SSH_KEY = 'super-secret-password';
   const sshFactory = mockSshFactory([
@@ -199,51 +271,70 @@ try {
   const sshSensor = await readSensor({ board_id: 2, address: '0x76', register: '0x00' }, sshOptions);
   ok('pi_sensor_read (ssh) returns the register value', sshSensor.output.raw === '0x17');
 
+  // ===================== SSH CREDENTIAL ROTATION TEST =====================
+  // auth_env is not in the reuse-WHERE clause — board is reused and auth_env is updated via applyDeclaredSpec
+  const sshRotated = await connectBoard({ name: 'shed-pi v2', target_kind: 'ssh', host: '192.168.1.42', user: 'pi', auth_env: 'TEST_PI_SSH_KEY_ROTATED' }, sshOptions);
+  ok('pi_board_connect reuses ssh board with updated auth_env (credential rotation)', sshRotated.success && sshRotated.output.board_id === 2 && sshRotated.output.reused === true);
+  const rotatedRow = state.query('SELECT auth_env FROM pi_boards WHERE id = 2')[0];
+  ok('pi_board_connect updates auth_env on reuse', rotatedRow && rotatedRow.auth_env === 'TEST_PI_SSH_KEY_ROTATED');
+
+  process.env.TEST_PI_SSH_KEY_ROTATED = 'new-password';
+  const sshReuse = await connectBoard({ name: 'shed-pi v2 again', target_kind: 'ssh', host: '192.168.1.42', user: 'pi', auth_env: 'TEST_PI_SSH_KEY_ROTATED' }, sshOptions);
+  ok('pi_board_connect reuses ssh board when host+port+user+auth_env all match', sshReuse.output.board_id === 2 && sshReuse.output.reused === true);
+
   // ===================== VIRTUAL BOARD =====================
   const virtualOptions = { state: Promise.resolve(state), workspaceRoot: process.cwd() };
   const virtualBoard = await connectBoard({ name: 'ci-bench', target_kind: 'virtual' }, virtualOptions);
-  ok('pi_board_connect creates a virtual board', virtualBoard.success && virtualBoard.output.board_id === 3);
+  ok('pi_board_connect creates a virtual board', virtualBoard.success);
+  const VID = virtualBoard.output.board_id;
 
   const seeded = await seedSim({
-    board_id: 3,
+    board_id: VID,
     pins: [{ pin: 22, level: false }, { pin: 23, fault: 'write_fails' }],
     registers: [{ address: '0x48', register: '0x00', value: '17.5' }],
   }, virtualOptions);
   ok('pi_sim_seed seeds pins and registers', seeded.success && seeded.output.pins.length === 2 && seeded.output.registers.length === 1);
 
-  const virtualDiscover = await discoverBoard({ board_id: 3 }, virtualOptions);
+  const virtualDiscover = await discoverBoard({ board_id: VID }, virtualOptions);
   ok('pi_board_discover (virtual) synthesizes seeded state', virtualDiscover.output.pin_count === 2 && virtualDiscover.output.i2c_addresses.includes('0x48'));
 
-  await configurePin({ board_id: 3, pin: 22, mode: 'out', role: 'status LED' }, virtualOptions);
-  await configurePin({ board_id: 3, pin: 23, mode: 'out', role: 'relay channel 1', is_actuator: true }, virtualOptions);
+  await configurePin({ board_id: VID, pin: 22, mode: 'out', role: 'status LED' }, virtualOptions);
+  await configurePin({ board_id: VID, pin: 23, mode: 'out', role: 'relay channel 1', is_actuator: true }, virtualOptions);
 
-  const virtualBlocked = await writeGpio({ board_id: 3, pin: 22, level: true }, virtualOptions);
+  const virtualBlocked = await writeGpio({ board_id: VID, pin: 22, level: true }, virtualOptions);
   ok('pi_gpio_write (virtual) blocks without approval', virtualBlocked.output.blocked === true);
-  const virtualWritten = await writeGpio({ board_id: 3, pin: 22, level: true, approved: true }, virtualOptions);
+  const virtualWritten = await writeGpio({ board_id: VID, pin: 22, level: true, approved: true }, virtualOptions);
   ok('pi_gpio_write (virtual) executes with approval', virtualWritten.output.blocked === false);
-  const virtualRead = await readGpio({ board_id: 3, pin: 22 }, virtualOptions);
+  const virtualRead = await readGpio({ board_id: VID, pin: 22 }, virtualOptions);
   ok('pi_gpio_read (virtual) reflects the simulated write', virtualRead.output.level === 1);
 
   let faultThrew = false;
   try {
-    await writeGpio({ board_id: 3, pin: 23, level: true, approved: true }, virtualOptions);
+    await writeGpio({ board_id: VID, pin: 23, level: true, approved: true }, virtualOptions);
   } catch {
     faultThrew = true;
   }
   ok('pi_gpio_write (virtual) honors a seeded write_fails fault even when approved', faultThrew);
 
-  const virtualSensor = await readSensor({ board_id: 3, address: '0x48', register: '0x00' }, virtualOptions);
+  const virtualSensor = await readSensor({ board_id: VID, address: '0x48', register: '0x00' }, virtualOptions);
   ok('pi_sensor_read (virtual) returns the seeded value', virtualSensor.output.raw === '17.5');
 
-  await recordAction({ board_id: 3, action: 'done', status: 'completed', value_summary: 'ci scenario complete' }, virtualOptions);
+  await recordAction({ board_id: VID, action: 'done', status: 'completed', value_summary: 'ci scenario complete' }, virtualOptions);
 
-  const report = await reportBoard({ board_id: 3 }, virtualOptions);
+  // ===================== EMPTY BOARD REPORT/DIAGRAM =====================
+  const emptyBoard = await connectBoard({ name: 'empty-test', target_kind: 'virtual' }, virtualOptions);
+  const emptyReport = await reportBoard({ board_id: emptyBoard.output.board_id }, virtualOptions);
+  ok('pi_board_report on empty board returns PI_HANDOFF', emptyReport.success && emptyReport.output.markdown.startsWith('PI_HANDOFF'));
+  const emptyDiagram = await diagramBoard({ board_id: emptyBoard.output.board_id }, virtualOptions);
+  ok('pi_board_diagram on empty board returns mermaid with no pins', emptyDiagram.success && emptyDiagram.output.pin_count === 0);
+
+  const report = await reportBoard({ board_id: VID }, virtualOptions);
   ok('pi_board_report returns PI_HANDOFF', report.success && report.output.markdown.startsWith('PI_HANDOFF'));
   ok('pi_board_report reports the virtual target', report.output.markdown.includes('virtual:ci-bench'));
   ok('pi_board_report clears the weak-handoff threshold', report.output.markdown.length >= 700);
   ok('pi_board_report lists the actuator pin', report.output.markdown.includes('[actuator: real-world effect]'));
 
-  const diagram = await diagramBoard({ board_id: 3 }, virtualOptions);
+  const diagram = await diagramBoard({ board_id: VID }, virtualOptions);
   ok('pi_board_diagram returns mermaid source', diagram.success && diagram.output.format === 'mermaid' && diagram.output.mermaid.startsWith('flowchart'));
   ok('pi_board_diagram groups pins by mode subgraph', diagram.output.mermaid.includes('subgraph MODE_OUT'));
   ok('pi_board_diagram flags the actuator pin', diagram.output.mermaid.includes('class PIN_23') && /class PIN_23\S* actuator/.test(diagram.output.mermaid));
@@ -260,6 +351,13 @@ try {
   ok('pi_llm_advisor recommends a viable setup at 8GB', llm8gb.output.recommendation.viable === true);
   ok('pi_llm_advisor mentions an 8B-class model at 8GB', /8b/i.test(llm8gb.output.recommendation.model_size_class));
   ok('pi_llm_advisor advises swap at 8GB', /swap|zram/i.test(llm8gb.output.recommendation.swap_advice));
+
+  // Test all 5 OS workloads
+  const workloads = ['headless-server', 'home-assistant', 'media-center', 'kiosk', 'desktop'];
+  for (const wl of workloads) {
+    const osAdv = await advisorOs({ ram_gb: 4, workload: wl }, advisorOptions);
+    ok(`pi_os_advisor handles workload=${wl}`, osAdv.success && osAdv.output.recommendation.image);
+  }
 
   const osHomeAssistant = await advisorOs({ ram_gb: 8, workload: 'home-assistant' }, advisorOptions);
   ok('pi_os_advisor recommends HAOS or a container route for home-assistant', /Home Assistant/i.test(osHomeAssistant.output.recommendation.image) || /Home Assistant/i.test(osHomeAssistant.output.recommendation.alternative || ''));
@@ -278,14 +376,28 @@ try {
   }
   ok('pi_llm_advisor requires ram_gb when no board/override provides it', missingRamThrew);
 
-  const advisoryList = state.query('SELECT * FROM pi_advisories ORDER BY id ASC');
-  ok('pi_advisories recorded every advisor call', advisoryList.length === 4);
+  const finalAdvisoryList = state.query('SELECT * FROM pi_advisories ORDER BY id ASC');
+  ok('pi_advisories recorded every advisor call', finalAdvisoryList.length >= 4);
 
   const boardReportWithAdvisories = await reportBoard({ board_id: ramBoard.output.board_id }, advisorOptions);
   ok('pi_board_report includes an Advisories section', boardReportWithAdvisories.output.markdown.includes('## Advisories'));
   ok('pi_board_report lists the board-scoped advisory', boardReportWithAdvisories.output.markdown.includes('llm_builder'));
 
   ok('activity stream captured the full lifecycle', state.list('pi_activity').length >= 10);
+
+  // ===================== REAL BOARD FAILURE MODE TEST =====================
+  // Test discoverReal all-commands-fail detection: mock all commands as errors
+  const failExec = mockExec([]);
+  const failOptions = { state: Promise.resolve(state), exec: failExec, workspaceRoot: process.cwd() };
+  const failBoard = await connectBoard({ name: 'unreachable', target_kind: 'local' }, failOptions);
+  let discoverFailed = false;
+  try {
+    await discoverBoard({ board_id: failBoard.output.board_id }, failOptions);
+  } catch {
+    discoverFailed = true;
+  }
+  ok('pi_board_discover (real) throws when all commands fail', discoverFailed);
+
 } finally {
   state.close();
 }

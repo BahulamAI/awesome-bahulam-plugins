@@ -17,7 +17,9 @@ export async function call(args = {}, options = {}) {
   if (!board) throw new Error(`board ${boardId} not found`);
 
   const result = state.query(
-    'INSERT INTO pi_pins (board_id, pin, mode, role, is_actuator, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+    `INSERT INTO pi_pins (board_id, pin, mode, role, is_actuator, created_at)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(board_id, pin) DO UPDATE SET mode = excluded.mode, role = excluded.role, is_actuator = excluded.is_actuator`,
     [boardId, pin, mode, role, isActuator ? 1 : 0, nowIso()],
   );
   const pinRowId = Number(result.lastInsertRowid);

@@ -9,12 +9,13 @@ function targetFor(targetKind, { name, host, port, user }) {
 // Lets a board be re-declared with its RAM tier / model string after the
 // fact, without requiring force_new — useful since v1 has no live RAM
 // auto-detection (see plan_03_raspberrypi_advisors.md).
-function applyDeclaredSpec(state, boardId, ramGb, model) {
-  if (ramGb === null && !model) return;
+function applyDeclaredSpec(state, boardId, ramGb, model, authEnv) {
+  if (ramGb === null && !model && !authEnv) return;
   const sets = [];
   const params = [];
   if (ramGb !== null) { sets.push('ram_gb = ?'); params.push(ramGb); }
   if (model) { sets.push('model = ?'); params.push(model); }
+  if (authEnv) { sets.push('auth_env = ?'); params.push(authEnv); }
   params.push(boardId);
   state.query(`UPDATE pi_boards SET ${sets.join(', ')} WHERE id = ?`, params);
 }
@@ -28,7 +29,8 @@ export async function call(args = {}, options = {}) {
   const user = targetKind === 'ssh' ? String(args.user || '').trim() : '';
   const authEnv = targetKind === 'ssh' ? String(args.auth_env || '').trim() : '';
   const forceNew = args.force_new === true;
-  const ramGb = args.ram_gb !== undefined && args.ram_gb !== null && args.ram_gb !== '' ? Number(args.ram_gb) : null;
+  const rawRamGb = args.ram_gb !== undefined && args.ram_gb !== null && args.ram_gb !== '' ? Number(args.ram_gb) : null;
+  const ramGb = rawRamGb !== null && Number.isFinite(rawRamGb) && rawRamGb > 0 ? rawRamGb : null;
   const model = args.model !== undefined ? String(args.model || '').trim() : '';
 
   if (!name) throw new Error('name is required');
@@ -46,7 +48,7 @@ export async function call(args = {}, options = {}) {
     if (Number.isInteger(activeBoardId) && activeBoardId > 0 && runtime?.target === target) {
       const active = state.query('SELECT * FROM pi_boards WHERE id = ? LIMIT 1', [activeBoardId])[0];
       if (active && active.status !== 'failed') {
-        applyDeclaredSpec(state, activeBoardId, ramGb, model);
+        applyDeclaredSpec(state, activeBoardId, ramGb, model, authEnv);
         state.append('pi_activity', { type: 'board_reused', board_id: activeBoardId, name: active.name, target });
         return {
           success: true,
@@ -62,7 +64,7 @@ export async function call(args = {}, options = {}) {
         : { sql: `SELECT * FROM pi_boards WHERE target_kind = 'local' AND status IN ('planned', 'connected') ORDER BY id DESC LIMIT 1`, params: [] };
     const existing = state.query(existingQuery.sql, existingQuery.params)[0];
     if (existing) {
-      applyDeclaredSpec(state, Number(existing.id), ramGb, model);
+      applyDeclaredSpec(state, Number(existing.id), ramGb, model, authEnv);
       state.set('pi_runtime_state', { active_board_id: Number(existing.id), target, status: existing.status });
       state.append('pi_activity', { type: 'board_reused', board_id: Number(existing.id), name: existing.name, target });
       return {

@@ -25,8 +25,12 @@ async function discoverReal(board, options) {
   const model = await runOnBoard(board, 'cat', ['/proc/device-tree/model'], options).catch(() => ({ stdout: 'unknown' }));
   const gpio = await runOnBoard(board, 'pinctrl', [], options).catch(() => ({ stdout: '' }));
   const i2c = await runOnBoard(board, 'i2cdetect', ['-y', '1'], options).catch(() => ({ stdout: '' }));
+  const modelStr = model.stdout.trim().replace(/\0/g, '');
+  if ((modelStr === 'unknown' || modelStr === '') && !gpio.stdout && !i2c.stdout) {
+    throw new Error(`board ${board.name} is unreachable — all discovery commands failed. Check connection or target_kind.`);
+  }
   return {
-    model: model.stdout.trim().replace(/\0/g, ''),
+    model: modelStr,
     pins: parsePinctrlOutput(gpio.stdout),
     i2cAddresses: parseI2cDetectOutput(i2c.stdout),
   };

@@ -20,7 +20,10 @@ export async function call(args = {}, options = {}) {
   const board = state.query('SELECT * FROM pi_boards WHERE id = ? LIMIT 1', [boardId])[0];
   if (!board) throw new Error(`board ${boardId} not found`);
 
-  const isPwm = args.duty_cycle !== undefined && args.duty_cycle !== null;
+  const hasLevel = args.level !== undefined && args.level !== null;
+  const hasDuty = args.duty_cycle !== undefined && args.duty_cycle !== null;
+  if (!hasLevel && !hasDuty) throw new Error('Either level or duty_cycle must be provided');
+  const isPwm = hasDuty;
   let valueSummary;
   let dutyCycle = 0;
   let level = 0;
