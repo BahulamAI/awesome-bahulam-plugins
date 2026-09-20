@@ -1,0 +1,453 @@
+apiVersion: bahulam.plugin/1
+kind: Plugin
+metadata:
+  name: raspberry-pi
+  version: 0.2.0
+  description: >
+    Raspberry Pi GPIO and I2C sensor operations runtime. The Pi operator
+    connects to a board — running locally on the Pi, remotely over SSH, or
+    fully simulated for testing/demos without hardware — discovers its
+    GPIO/I2C state, declares pin roles, and reads or writes hardware with
+    every GPIO write gated behind explicit user approval.
+  author: Rohit
+  repository: https://github.com/codehive-sr/awesome-bahulam-plugins
+
+config:
+  requirements:
+    env: []
+    network:
+      - Raspberry Pi devices selected by the user (SSH, when target_kind=ssh)
+    optional_runtime:
+      - node package: ssh2
+      - system tool: pinctrl (or raspi-gpio) on the target Pi (local/ssh only)
+      - system tool: i2c-tools (i2cdetect, i2cget, i2cset) on the target Pi (local/ssh only)
+      - system tool: vcgencmd on the target Pi (local/ssh only)
+
+  state:
+    tables:
+      - name: pi_boards
+        columns:
+          - { name: id, type: INTEGER, primary: true, autoincrement: true }
+          - { name: name, type: TEXT, not_null: true }
+          - {
+              name: target_kind,
+              type: TEXT,
+              not_null: true,
+              default: "'local'",
+            }
+          - { name: host, type: TEXT, not_null: true, default: "''" }
+          - { name: port, type: INTEGER, not_null: true, default: 0 }
+          - { name: user, type: TEXT, not_null: true, default: "''" }
+          - { name: auth_env, type: TEXT, not_null: true, default: "''" }
+          - { name: ram_gb, type: INTEGER }
+          - { name: model, type: TEXT, not_null: true, default: "''" }
+          - { name: status, type: TEXT, not_null: true, default: "'planned'" }
+          - { name: created_at, type: TEXT, not_null: true }
+          - { name: updated_at, type: TEXT, not_null: true }
+        indexes:
+          - { columns: [status] }
+
+      - name: pi_pins
+        columns:
+          - { name: id, type: INTEGER, primary: true, autoincrement: true }
+          - {
+              name: board_id,
+              type: INTEGER,
+              not_null: true,
+              references: "pi_boards(id)",
+            }
+          - { name: pin, type: INTEGER, not_null: true }
+          - { name: mode, type: TEXT, not_null: true }
+          - { name: role, type: TEXT, not_null: true, default: "''" }
+          - { name: is_actuator, type: INTEGER, not_null: true, default: 0 }
+          - { name: created_at, type: TEXT, not_null: true }
+        indexes:
+          - { columns: [board_id] }
+
+      - name: pi_actions
+        columns:
+          - { name: id, type: INTEGER, primary: true, autoincrement: true }
+          - {
+              name: board_id,
+              type: INTEGER,
+              not_null: true,
+              references: "pi_boards(id)",
+            }
+          - { name: action, type: TEXT, not_null: true }
+          - { name: pin, type: INTEGER }
+          - { name: value_summary, type: TEXT, not_null: true, default: "''" }
+          - { name: status, type: TEXT, not_null: true }
+          - {
+              name: requires_approval,
+              type: INTEGER,
+              not_null: true,
+              default: 0,
+            }
+          - { name: created_at, type: TEXT, not_null: true }
+        indexes:
+          - { columns: [board_id] }
+
+      - name: pi_sim_pins
+        columns:
+          - { name: id, type: INTEGER, primary: true, autoincrement: true }
+          - {
+              name: board_id,
+              type: INTEGER,
+              not_null: true,
+              references: "pi_boards(id)",
+            }
+          - { name: pin, type: INTEGER, not_null: true }
+          - { name: level, type: INTEGER, not_null: true, default: 0 }
+          - { name: duty_cycle, type: REAL }
+          - { name: fault, type: TEXT, not_null: true, default: "''" }
+          - { name: updated_at, type: TEXT, not_null: true }
+        indexes:
+          - { columns: [board_id, pin], unique: true }
+
+      - name: pi_sim_registers
+        columns:
+          - { name: id, type: INTEGER, primary: true, autoincrement: true }
+          - {
+              name: board_id,
+              type: INTEGER,
+              not_null: true,
+              references: "pi_boards(id)",
+            }
+          - { name: address, type: TEXT, not_null: true }
+          - { name: register, type: TEXT, not_null: true }
+          - { name: value, type: TEXT, not_null: true, default: "'00'" }
+          - { name: fault, type: TEXT, not_null: true, default: "''" }
+          - { name: updated_at, type: TEXT, not_null: true }
+        indexes:
+          - { columns: [board_id, address, register], unique: true }
+
+      - name: pi_advisories
+        columns:
+          - { name: id, type: INTEGER, primary: true, autoincrement: true }
+          - { name: board_id, type: INTEGER, references: "pi_boards(id)" }
+          - { name: advisor, type: TEXT, not_null: true }
+          - { name: workload, type: TEXT, not_null: true, default: "''" }
+          - { name: ram_gb, type: INTEGER, not_null: true }
+          - { name: inputs_json, type: TEXT, not_null: true, default: "'{}'" }
+          - {
+              name: recommendation_json,
+              type: TEXT,
+              not_null: true,
+              default: "'{}'",
+            }
+          - { name: rationale, type: TEXT, not_null: true, default: "''" }
+          - { name: created_at, type: TEXT, not_null: true }
+        indexes:
+          - { columns: [board_id] }
+
+    context_always:
+      - pi_runtime_state
+      - { stream: pi_activity, limit: 8 }
+
+    context_tools:
+      - name: list_pi_boards
+        table: pi_boards
+        description: List tracked Raspberry Pi boards (local, ssh, or virtual targets).
+        parameters:
+          type: object
+          properties:
+            limit: { type: integer, description: "Max rows to return." }
+
+      - name: list_pi_actions
+        table: pi_actions
+        description: List GPIO/sensor actions recorded for a board.
+        parameters:
+          type: object
+          properties:
+            board_id: { type: integer }
+            limit: { type: integer }
+        where: "board_id = ?"
+        params: [board_id]
+
+      - name: list_pi_advisories
+        table: pi_advisories
+        description: List recorded LLM/OS advisor recommendations for a board.
+        parameters:
+          type: object
+          properties:
+            board_id: { type: integer }
+            limit: { type: integer }
+        where: "board_id = ?"
+        params: [board_id]
+
+  tools:
+    - name: pi_board_connect
+      description: >
+        Create or reuse a tracked Raspberry Pi board target. Use
+        target_kind=local when this runtime is on the Pi itself,
+        target_kind=ssh to drive a remote Pi over the network, or
+        target_kind=virtual for a fully simulated board (no hardware or
+        network) used for testing and demos. auth_env must name an
+        environment variable holding an SSH private key path or password —
+        never pass the secret value itself as a tool argument.
+      tool: ./tools/pi-board-connect.mjs
+      parameters:
+        type: object
+        properties:
+          name: { type: string, description: "Short board name." }
+          target_kind:
+            {
+              type: string,
+              enum: [local, ssh, virtual],
+              description: "Default local.",
+            }
+          host: { type: string, description: "Required when target_kind=ssh." }
+          port: { type: integer, description: "SSH port. Default 22." }
+          user: { type: string, description: "Required when target_kind=ssh." }
+          auth_env:
+            {
+              type: string,
+              description: "Name of an env var holding the SSH key path or password. Required when target_kind=ssh.",
+            }
+          force_new:
+            {
+              type: boolean,
+              description: "Create a new board even when an active matching board exists. Default false.",
+            }
+          ram_gb:
+            {
+              type: integer,
+              description: "Declared RAM in GB (1, 2, 4, 8, or 16 for Pi 5). Not probed automatically — used by pi_llm_advisor/pi_os_advisor. Can be set or updated on an existing board without force_new.",
+            }
+          model:
+            {
+              type: string,
+              description: 'Declared board model, e.g. "Raspberry Pi 5". Informational; not probed automatically.',
+            }
+        required: [name]
+
+    - name: pi_board_discover
+      description: >
+        Probe a connected board: model info, GPIO pin state (pinctrl/
+        raspi-gpio), and I2C devices found on the bus (i2cdetect). For a
+        virtual board this synthesizes the same shaped output from seeded
+        simulation state instead of touching real hardware. Use this before
+        claiming a pin or sensor is unavailable.
+      tool: ./tools/pi-board-discover.mjs
+      parameters:
+        type: object
+        properties:
+          board_id: { type: integer }
+        required: [board_id]
+
+    - name: pi_pin_configure
+      description: >
+        Declare a pin's mode and role before reading or writing it. Set
+        is_actuator true for any pin with a real-world physical effect
+        (relay, motor, lock, valve) so reports and reviewers can flag it.
+      tool: ./tools/pi-pin-configure.mjs
+      parameters:
+        type: object
+        properties:
+          board_id: { type: integer }
+          pin: { type: integer, description: "BCM GPIO number, 0-27." }
+          mode: { type: string, enum: [in, out, pwm, i2c, spi] }
+          role:
+            {
+              type: string,
+              description: 'e.g. "status LED" or "relay channel 1".',
+            }
+          is_actuator:
+            {
+              type: boolean,
+              description: "True if this pin drives something in the physical world.",
+            }
+        required: [board_id, pin, mode, role]
+
+    - name: pi_gpio_write
+      description: >
+        Set a digital pin level or PWM duty cycle. Every write is gated —
+        including on virtual boards: without approved=true the request is
+        validated and recorded as blocked, pending explicit user approval.
+        Never call this with approved=true unless the user has explicitly
+        authorized this exact write in this turn.
+      tool: ./tools/pi-gpio-write.mjs
+      parameters:
+        type: object
+        properties:
+          board_id: { type: integer }
+          pin: { type: integer, description: "BCM GPIO number, 0-27." }
+          level:
+            {
+              type: boolean,
+              description: "Digital level to set (true=high). Ignored if duty_cycle is given.",
+            }
+          duty_cycle:
+            {
+              type: number,
+              description: "PWM duty cycle percent, 0-100. Takes precedence over level.",
+            }
+          approved:
+            {
+              type: boolean,
+              description: "Must be true, and only set after explicit user approval, for the write to execute.",
+            }
+        required: [board_id, pin]
+
+    - name: pi_gpio_read
+      description: Read a digital pin's current level. No approval required, on any target_kind.
+      tool: ./tools/pi-gpio-read.mjs
+      parameters:
+        type: object
+        properties:
+          board_id: { type: integer }
+          pin: { type: integer, description: "BCM GPIO number, 0-27." }
+        required: [board_id, pin]
+
+    - name: pi_sensor_read
+      description: Read an I2C sensor register (i2cget). No approval required, on any target_kind.
+      tool: ./tools/pi-sensor-read.mjs
+      parameters:
+        type: object
+        properties:
+          board_id: { type: integer }
+          bus: { type: integer, description: "I2C bus number. Default 1." }
+          address:
+            { type: string, description: 'I2C device address, e.g. "0x48".' }
+          register:
+            { type: string, description: 'Register to read, e.g. "0x00".' }
+        required: [board_id, address, register]
+
+    - name: pi_sim_seed
+      description: >
+        Virtual boards only. Preload a simulated board's pin levels, PWM
+        duty cycles, and I2C register values, and optionally inject a fault
+        (write_fails on a pin, or read_fails on a pin or register) to script
+        a deterministic test/demo scenario. Throws on non-virtual boards.
+      tool: ./tools/pi-sim-seed.mjs
+      parameters:
+        type: object
+        properties:
+          board_id: { type: integer }
+          pins:
+            type: array
+            items:
+              type: object
+              properties:
+                pin: { type: integer }
+                level: { type: boolean }
+                duty_cycle: { type: number }
+                fault: { type: string, enum: ["", write_fails, read_fails] }
+              required: [pin]
+          registers:
+            type: array
+            items:
+              type: object
+              properties:
+                address: { type: string }
+                register: { type: string }
+                value: { type: string }
+                fault: { type: string, enum: ["", read_fails] }
+              required: [address, register]
+        required: [board_id]
+
+    - name: pi_action_record
+      description: >
+        Record a board action, approval, error, or freeform note on the
+        shared blackboard.
+      tool: ./tools/pi-action-record.mjs
+      parameters:
+        type: object
+        properties:
+          board_id: { type: integer }
+          action:
+            {
+              type: string,
+              enum:
+                [read, write, pwm, sensor_read, exec, approval, error, done],
+            }
+          pin: { type: integer }
+          value_summary: { type: string }
+          status:
+            {
+              type: string,
+              enum: [planned, completed, blocked, failed, approved],
+            }
+          requires_approval: { type: boolean }
+        required: [board_id, action, status]
+
+    - name: pi_board_report
+      description: Build a structured PI_HANDOFF report of board state, pin map, action trail, and pending approval gates.
+      tool: ./tools/pi-board-report.mjs
+      parameters:
+        type: object
+        properties:
+          board_id: { type: integer }
+        required: [board_id]
+
+    - name: pi_board_diagram
+      description: >
+        Render a board's declared pins as a Mermaid flowchart: one subgraph
+        per mode (in/out/pwm/i2c/spi), pins labeled with their role, and
+        actuator-flagged pins visually highlighted. Returns both raw
+        Mermaid source and a ```mermaid fenced markdown block ready to
+        paste into a chat reply or report. The workspace panel also renders
+        this diagram live.
+      tool: ./tools/pi-board-diagram.mjs
+      parameters:
+        type: object
+        properties:
+          board_id: { type: integer }
+        required: [board_id]
+
+    - name: pi_llm_advisor
+      description: >
+        Recommend a local-LLM setup (model size class, quantization, runtime,
+        swap/storage advice) for a Pi 5's RAM tier and a stated use case.
+        Never installs or downloads anything — it returns a recommended
+        snapshot for the user to act on, and records it as an advisory. Pass
+        board_id to use a board's declared ram_gb, or ram_gb directly to
+        advise without a connected board.
+      tool: ./tools/pi-llm-advisor.mjs
+      parameters:
+        type: object
+        properties:
+          board_id: { type: integer }
+          ram_gb:
+            {
+              type: integer,
+              description: "Overrides the board's declared RAM, or required if board_id is omitted.",
+            }
+          use_case: { type: string, enum: [chat, rag, coding, voice_assistant] }
+          context_length_pref: { type: string, enum: [short, long] }
+        required: []
+
+    - name: pi_os_advisor
+      description: >
+        Recommend an OS image, boot media, and starter config for a stated
+        workload (headless server, home assistant, media center, kiosk,
+        desktop) on a Pi 5. Never installs, flashes, or configures anything —
+        it returns a recommended snapshot for the user to act on, and
+        records it as an advisory. Pass board_id to use a board's declared
+        ram_gb, or ram_gb directly to advise without a connected board.
+      tool: ./tools/pi-os-advisor.mjs
+      parameters:
+        type: object
+        properties:
+          board_id: { type: integer }
+          ram_gb:
+            {
+              type: integer,
+              description: "Overrides the board's declared RAM, or required if board_id is omitted.",
+            }
+          workload:
+            {
+              type: string,
+              enum:
+                [headless-server, home-assistant, media-center, kiosk, desktop],
+            }
+          boot_media_pref: { type: string, enum: [sd, nvme, auto] }
+        required: []
+
+  workspace: ./config/workspace.yaml
+  agents_from: ./config/agents/
+
+  views:
+    - type: panel
+      name: Raspberry Pi
+      source: ./workspace/index.html

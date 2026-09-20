@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Raspberry Pi</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.9.1/mermaid.min.js"></script>
+<style>
+:root{--bg:#0f1115;--panel:#171b22;--line:#2a313c;--text:#eff3f8;--muted:#a5adba;--accent:#39c6d6;--warn:#f0b429;--ok:#3ecf8e;--err:#f0616d}
+*{box-sizing:border-box}
+body{margin:0;font:13px/1.55 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);padding:20px}
+h1{font-size:19px;margin:0 0 4px}
+p.lede{color:var(--muted);margin:0 0 20px;max-width:720px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+.card.wide{grid-column:1/-1}
+h2{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);margin:0 0 10px}
+.row{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-bottom:8px}
+label{display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted);flex:1;min-width:110px}
+label.checkbox{flex-direction:row;align-items:center;gap:6px;flex:0}
+input,select,textarea{border:1px solid var(--line);border-radius:6px;padding:6px 8px;font:12px ui-monospace,Menlo,Consolas,monospace;background:#0d1015;color:var(--text)}
+input:focus,select:focus,textarea:focus{outline:1px solid var(--accent);border-color:var(--accent)}
+textarea{width:100%;min-height:64px;resize:vertical}
+button{border:0;background:var(--accent);color:#04222a;border-radius:6px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer}
+button.ghost{background:transparent;color:var(--text);border:1px solid var(--line)}
+button:hover{filter:brightness(1.1)}
+.pill{display:inline-flex;align-items:center;min-height:20px;padding:2px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted);font-size:11px;margin:2px 4px 2px 0}
+.pill.actuator{color:var(--warn);border-color:var(--warn)}
+.status{font-size:11px;color:var(--muted);margin-top:6px}
+.status.ok{color:var(--ok)} .status.err{color:var(--err)}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th,td{text-align:left;border-bottom:1px solid var(--line);padding:6px 8px;vertical-align:top}
+th{color:var(--muted);font-weight:600}
+code{color:var(--accent);overflow-wrap:anywhere}
+footer{margin-top:20px;font-size:11px;color:var(--muted)}
+footer code{background:#0d1015;padding:1px 5px;border-radius:3px}
+</style>
+</head>
+<body>
+<h1>Raspberry Pi <span id="live" style="font-size:11px;color:var(--muted);font-weight:400">· connecting…</span></h1>
+<p class="lede">GPIO/I2C board sessions, declared pins, the action trail, and pending approval gates. Boards can be <code>local</code>, <code>ssh</code>, or a fully <code>virtual</code> simulated board for testing without hardware. Every GPIO write requires explicit approval, on every target_kind.</p>
+
+<div class="grid">
+
+  <div class="card">
+    <h2>Connect a board</h2>
+    <div class="row">
+      <label>name<input id="cName" value="test-bench"></label>
+      <label>target_kind
+        <select id="cKind">
+          <option value="virtual" selected>virtual</option>
+          <option value="local">local</option>
+          <option value="ssh">ssh</option>
+        </select>
+      </label>
+    </div>
+    <div class="row" id="sshFields" style="display:none">
+      <label>host<input id="cHost" placeholder="192.168.1.42"></label>
+      <label>port<input id="cPort" type="number" value="22"></label>
+      <label>user<input id="cUser" placeholder="pi"></label>
+      <label>auth_env<input id="cAuthEnv" placeholder="MY_PI_SSH_KEY"></label>
+    </div>
+    <div class="row">
+      <button id="cGo">Connect</button>
+    </div>
+    <div class="status" id="cStatus"></div>
+  </div>
+
+  <div class="card">
+    <h2>Seed a virtual board</h2>
+    <div class="row">
+      <label>board_id<input id="sBoardId" type="number" placeholder="1"></label>
+      <label>pin<input id="sPin" type="number" placeholder="17"></label>
+      <label>level
+        <select id="sLevel"><option value="0">low</option><option value="1">high</option></select>
+      </label>
+      <label>fault
+        <select id="sFault"><option value="">none</option><option value="write_fails">write_fails</option><option value="read_fails">read_fails</option></select>
+      </label>
+    </div>
+    <div class="row">
+      <button id="sGo">Seed pin</button>
+    </div>
+    <div class="status" id="sStatus"></div>
+  </div>
+
+  <div class="card wide">
+    <h2>Quick actions on a board</h2>
+    <div class="row">
+      <label>board_id<input id="qBoardId" type="number" placeholder="1"></label>
+      <label>pin<input id="qPin" type="number" placeholder="17"></label>
+      <label class="checkbox"><input id="qLevel" type="checkbox">level high</label>
+      <label class="checkbox"><input id="qApproved" type="checkbox">approved</label>
+    </div>
+    <div class="row">
+      <button class="ghost" id="qDiscover">Discover</button>
+      <button class="ghost" id="qRead">Read pin</button>
+      <button id="qWrite">Write pin</button>
+      <button class="ghost" id="qReport">Report</button>
+    </div>
+    <div class="out" id="qOut" style="background:#0d1015;border-radius:8px;padding:10px;font:12px/1.4 ui-monospace,Menlo,monospace;white-space:pre-wrap;max-height:260px;overflow:auto;color:#c9d1d9">click an action above</div>
+    <div class="status" id="qStatus"></div>
+  </div>
+
+  <div class="card wide">
+    <h2>Boards</h2>
+    <div class="row"><button class="ghost" id="bReload">Reload</button><span class="status" id="bStatus"></span></div>
+    <table>
+      <thead><tr><th>id</th><th>name</th><th>target</th><th>status</th><th>updated</th></tr></thead>
+      <tbody id="bBody"><tr><td colspan="5" style="color:var(--muted)">loading…</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="card wide">
+    <h2>Board diagram</h2>
+    <div class="row">
+      <label>board_id<input id="dBoardId" type="number" placeholder="1"></label>
+      <button class="ghost" id="dGo">Draw</button>
+      <span class="status" id="dStatus"></span>
+    </div>
+    <div id="dContainer" style="background:#0d1015;border-radius:8px;padding:14px;min-height:80px;overflow:auto">
+      <span style="color:var(--muted)">enter a board_id and click Draw</span>
+    </div>
+  </div>
+
+  <div class="card wide">
+    <h2>Action trail &amp; approval gates</h2>
+    <div class="row"><label>board_id<input id="aBoardId" type="number" placeholder="1"></label><button class="ghost" id="aReload">Reload</button><span class="status" id="aStatus"></span></div>
+    <table>
+      <thead><tr><th>id</th><th>action</th><th>pin</th><th>status</th><th>approval</th><th>summary</th></tr></thead>
+      <tbody id="aBody"><tr><td colspan="6" style="color:var(--muted)">enter a board_id and reload</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="card wide">
+    <h2>Advisors — recommendations, not installs</h2>
+    <p class="lede" style="margin-bottom:10px">Pure snapshots: what to run, not something done. Neither advisor touches hardware.</p>
+    <div class="row">
+      <label>board_id (optional)<input id="vBoardId" type="number" placeholder="1"></label>
+      <label>ram_gb (override)<input id="vRamGb" type="number" placeholder="8"></label>
+    </div>
+    <div class="row">
+      <label>LLM use_case
+        <select id="vUseCase"><option value="chat">chat</option><option value="rag">rag</option><option value="coding">coding</option><option value="voice_assistant">voice_assistant</option></select>
+      </label>
+      <label>context_length_pref
+        <select id="vContextPref"><option value="short">short</option><option value="long">long</option></select>
+      </label>
+      <button class="ghost" id="vLlmGo">Run pi_llm_advisor</button>
+    </div>
+    <div class="row">
+      <label>OS workload
+        <select id="vWorkload">
+          <option value="headless-server">headless-server</option>
+          <option value="home-assistant">home-assistant</option>
+          <option value="media-center">media-center</option>
+          <option value="kiosk">kiosk</option>
+          <option value="desktop">desktop</option>
+        </select>
+      </label>
+      <label>boot_media_pref
+        <select id="vBootMedia"><option value="auto">auto</option><option value="sd">sd</option><option value="nvme">nvme</option></select>
+      </label>
+      <button class="ghost" id="vOsGo">Run pi_os_advisor</button>
+    </div>
+    <div class="out" id="vOut" style="background:#0d1015;border-radius:8px;padding:10px;font:12px/1.4 ui-monospace,Menlo,monospace;white-space:pre-wrap;max-height:260px;overflow:auto;color:#c9d1d9">run an advisor above</div>
+    <div class="status" id="vStatus"></div>
+  </div>
+
+</div>
+
+<footer>
+  Plugin: <code>raspberry-pi</code> · tools: <code>pi_board_connect</code>, <code>pi_board_discover</code>, <code>pi_pin_configure</code>, <code>pi_gpio_write</code>, <code>pi_gpio_read</code>, <code>pi_sensor_read</code>, <code>pi_sim_seed</code>, <code>pi_action_record</code>, <code>pi_board_report</code>, <code>pi_board_diagram</code>, <code>pi_llm_advisor</code>, <code>pi_os_advisor</code> · sub-agents: <code>pin-planner</code>, <code>safety-reviewer</code>
+</footer>
+
+<script>
+const PLUGIN = 'raspberry-pi';
+const token = new URLSearchParams(location.search).get('token') || '';
+const headers = { 'Content-Type': 'application/json', 'X-Bahulam-Local-Token': token };
+const $ = id => document.getElementById(id);
+
+async function tool(name, args) {
+  const res = await fetch('/api/tools/execute', { method: 'POST', headers, body: JSON.stringify({ name, args }) });
+  const body = await res.json();
+  if (!res.ok || body.ok === false) throw new Error(body.error || body.message || 'request failed');
+  const r = body.result;
+  if (r && r.success === false) throw new Error(String(r.output));
+  return r && r.output !== undefined ? r.output : r;
+}
+
+function setStatus(el, ok, text) { el.className = 'status ' + (ok ? 'ok' : 'err'); el.textContent = text; }
+
+// Number('') is 0, not NaN — so a numeric field left showing only its
+// placeholder (e.g. pin "17") silently reads as pin 0 instead of failing.
+// Require an actual typed value for anything that identifies a board/pin.
+function requiredInt(id, label) {
+  const raw = $(id).value.trim();
+  if (raw === '') throw new Error(`${label} is required — the "${$(id).placeholder}" you see is a placeholder, not a value`);
+  const n = Number(raw);
+  if (!Number.isInteger(n)) throw new Error(`${label} must be a whole number`);
+  return n;
+}
+
+// list_pi_boards/list_pi_actions are engine-generated context_tools (a
+// `table:` mapping in plugin.yaml), not one of this plugin's own .mjs
+// modules — their result comes back as a JSON-encoded string, not an
+// already-parsed array (confirmed from a live console dump: the "object"
+// printed was quoted JSON text, i.e. a string). Normalize whatever comes back.
+function asRows(value) {
+  if (typeof value === 'string') {
+    try { value = JSON.parse(value); } catch { /* leave as string; falls through below */ }
+  }
+  if (Array.isArray(value)) return value;
+  if (value && Array.isArray(value.rows)) return value.rows;
+  if (value && Array.isArray(value.items)) return value.items;
+  if (value && Array.isArray(value.data)) return value.data;
+  if (value && Array.isArray(value.results)) return value.results;
+  if (value && Array.isArray(value.result)) return value.result;
+  console.warn('raspberry-pi panel: unrecognized list result shape', value);
+  return [];
+}
+
+$('cKind').addEventListener('change', () => {
+  $('sshFields').style.display = $('cKind').value === 'ssh' ? 'flex' : 'none';
+});
+
+$('cGo').addEventListener('click', async () => {
+  try {
+    const args = { name: $('cName').value.trim() || 'board', target_kind: $('cKind').value };
+    if (args.target_kind === 'ssh') {
+      Object.assign(args, { host: $('cHost').value.trim(), port: Number($('cPort').value || 22), user: $('cUser').value.trim(), auth_env: $('cAuthEnv').value.trim() });
+    }
+    const r = await tool('pi_board_connect', args);
+    setStatus($('cStatus'), true, `board_id=${r.board_id} (${r.reused ? 'reused' : 'created'})`);
+    $('sBoardId').value = r.board_id; $('qBoardId').value = r.board_id; $('aBoardId').value = r.board_id; $('dBoardId').value = r.board_id;
+    reloadBoards();
+  } catch (err) { setStatus($('cStatus'), false, err.message); }
+});
+
+$('sGo').addEventListener('click', async () => {
+  try {
+    const boardId = requiredInt('sBoardId', 'board_id');
+    const pin = requiredInt('sPin', 'pin');
+    const fault = $('sFault').value;
+    const r = await tool('pi_sim_seed', { board_id: boardId, pins: [{ pin, level: $('sLevel').value === '1', fault }] });
+    setStatus($('sStatus'), true, `seeded pin ${pin}`);
+  } catch (err) { setStatus($('sStatus'), false, err.message); }
+});
+
+function show(out, payload) { out.textContent = typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2); }
+
+$('qDiscover').addEventListener('click', async () => {
+  try { show($('qOut'), await tool('pi_board_discover', { board_id: requiredInt('qBoardId', 'board_id') })); setStatus($('qStatus'), true, 'ok'); reloadActions(); }
+  catch (err) { setStatus($('qStatus'), false, err.message); }
+});
+$('qRead').addEventListener('click', async () => {
+  try { show($('qOut'), await tool('pi_gpio_read', { board_id: requiredInt('qBoardId', 'board_id'), pin: requiredInt('qPin', 'pin') })); setStatus($('qStatus'), true, 'ok'); reloadActions(); }
+  catch (err) { setStatus($('qStatus'), false, err.message); }
+});
+$('qWrite').addEventListener('click', async () => {
+  try {
+    const boardId = requiredInt('qBoardId', 'board_id');
+    const pin = requiredInt('qPin', 'pin');
+    show($('qOut'), await tool('pi_gpio_write', { board_id: boardId, pin, level: $('qLevel').checked, approved: $('qApproved').checked }));
+    setStatus($('qStatus'), true, $('qApproved').checked ? 'executed' : 'blocked — needs approval');
+    reloadActions();
+  } catch (err) { setStatus($('qStatus'), false, err.message); }
+});
+$('qReport').addEventListener('click', async () => {
+  try { const r = await tool('pi_board_report', { board_id: requiredInt('qBoardId', 'board_id') }); show($('qOut'), r.markdown); setStatus($('qStatus'), true, 'ok'); }
+  catch (err) { setStatus($('qStatus'), false, err.message); }
+});
+
+async function reloadBoards() {
+  try {
+    const rows = asRows(await tool('list_pi_boards', { limit: 50 }));
+    $('bBody').innerHTML = rows.length ? rows.map(r => `<tr>
+      <td>${r.id}</td><td>${r.name}</td>
+      <td><span class="pill">${r.target_kind}</span>${r.target_kind === 'ssh' ? `${r.user}@${r.host}:${r.port}` : r.target_kind === 'virtual' ? r.name : ''}</td>
+      <td>${r.status}</td><td>${(r.updated_at || '').replace('T', ' ').slice(0, 19)}</td>
+    </tr>`).join('') : '<tr><td colspan="5" style="color:var(--muted)">no boards yet — connect one above, or ask the agent</td></tr>';
+    setStatus($('bStatus'), true, `${rows.length} board(s)`);
+  } catch (err) { setStatus($('bStatus'), false, err.message); }
+}
+
+async function reloadActions() {
+  const boardId = Number($('aBoardId').value);
+  if (!boardId) { $('aBody').innerHTML = '<tr><td colspan="6" style="color:var(--muted)">enter a board_id and reload</td></tr>'; return; }
+  try {
+    const rows = asRows(await tool('list_pi_actions', { board_id: boardId, limit: 50 }));
+    $('aBody').innerHTML = rows.length ? rows.map(r => `<tr>
+      <td>${r.id}</td><td>${r.action}</td><td>${r.pin ?? ''}</td><td>${r.status}</td>
+      <td>${r.requires_approval ? '<span class="pill actuator">pending</span>' : ''}</td>
+      <td><code>${(r.value_summary || '').replace(/</g, '&lt;')}</code></td>
+    </tr>`).join('') : '<tr><td colspan="6" style="color:var(--muted)">no actions recorded yet</td></tr>';
+    setStatus($('aStatus'), true, `${rows.length} action(s)`);
+  } catch (err) { setStatus($('aStatus'), false, err.message); }
+}
+
+$('bReload').addEventListener('click', reloadBoards);
+$('aReload').addEventListener('click', reloadActions);
+
+function optionalInt(id) {
+  const raw = $(id).value.trim();
+  return raw === '' ? undefined : Number(raw);
+}
+
+$('vLlmGo').addEventListener('click', async () => {
+  try {
+    const args = { board_id: optionalInt('vBoardId'), ram_gb: optionalInt('vRamGb'), use_case: $('vUseCase').value, context_length_pref: $('vContextPref').value };
+    show($('vOut'), await tool('pi_llm_advisor', args));
+    setStatus($('vStatus'), true, 'ok');
+  } catch (err) { setStatus($('vStatus'), false, err.message); }
+});
+$('vOsGo').addEventListener('click', async () => {
+  try {
+    const args = { board_id: optionalInt('vBoardId'), ram_gb: optionalInt('vRamGb'), workload: $('vWorkload').value, boot_media_pref: $('vBootMedia').value };
+    show($('vOut'), await tool('pi_os_advisor', args));
+    setStatus($('vStatus'), true, 'ok');
+  } catch (err) { setStatus($('vStatus'), false, err.message); }
+});
+
+// Board diagram — Mermaid renders the current pin layout for a board:
+// one subgraph per mode, actuator pins visually flagged.
+try { mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'loose' }); } catch { /* mermaid failed to load */ }
+let _diagramSeq = 0;
+async function drawDiagram() {
+  const boardId = Number($('dBoardId').value);
+  if (!boardId) return;
+  try {
+    const r = await tool('pi_board_diagram', { board_id: boardId });
+    const id = 'pi-diagram-' + (++_diagramSeq);
+    const { svg } = await mermaid.render(id, r.mermaid);
+    $('dContainer').innerHTML = svg;
+    setStatus($('dStatus'), true, `${r.pin_count} pin(s), ${r.actuator_count} actuator(s)`);
+  } catch (err) {
+    setStatus($('dStatus'), false, err.message);
+  }
+}
+$('dGo').addEventListener('click', drawDiagram);
+
+// Reactive pulse — same pattern as hello-world/hello-mcp: re-query on our
+// own precise activity-stream events, on a raw kv('*') DML write, or on the
+// server's coarse kind:'*' pulse (another process wrote our state.db).
+let _t = null;
+const scheduleReload = () => { clearTimeout(_t); _t = setTimeout(() => { reloadBoards(); reloadActions(); if ($('dBoardId').value) drawDiagram(); }, 200); };
+try {
+  const es = new EventSource('/api/events?token=' + encodeURIComponent(token));
+  es.addEventListener('open', () => { $('live').textContent = '· live'; });
+  es.addEventListener('error', () => { $('live').textContent = '· reconnecting…'; });
+  es.addEventListener('plugin_state_changed', (ev) => {
+    let evt = {}; try { evt = JSON.parse(ev.data || '{}'); } catch {}
+    if (evt.plugin !== PLUGIN) return;
+    if ((evt.kind === 'records' && evt.target === 'pi_activity') || (evt.kind === 'kv' && evt.target === '*') || evt.kind === '*') {
+      scheduleReload();
+    }
+  });
+} catch { /* SSE unsupported — reload buttons still work */ }
+
+reloadBoards();
+</script>
+</body>
+</html>
