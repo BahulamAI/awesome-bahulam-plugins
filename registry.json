@@ -2,6 +2,15 @@
   "$schema": "https://docs.bahulam.ai/schemas/plugin-registry-1.json",
   "plugins": [
     {
+      "name": "azure-cost-analyzer",
+      "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
+      "ref": "main",
+      "subdir": "plugins/azure-cost-analyzer",
+      "description": "Azure Cost Management analysis — cost breakdowns by service, budget alerts, and spending reports. Credentials stored locally via plugin config state; the LLM never sees them.",
+      "author": "BahulamAI",
+      "tags": ["azure", "cost", "finops", "cloud", "budget", "config"]
+    },
+    {
       "name": "browser-use",
       "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
       "ref": "main",

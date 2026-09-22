@@ -1,0 +1,786 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Azure Cost Analyzer</title>
+  <meta name="bahulam-plugin" content="azure-cost-analyzer">
+  <link rel="stylesheet" href="/vendor/bahulam-plugin/bahulam-plugin.css">
+  <style>
+    :root {
+      --bg: #0d1117;
+      --panel: #161b22;
+      --border: #30363d;
+      --fg: #e6edf3;
+      --muted: #8b949e;
+      --primary: #58a6ff;
+      --success: #3fb950;
+      --warn: #d29922;
+      --error: #f85149;
+      --card-bg: #1c2128;
+      --bar-fill: #1f6feb;
+      --donut-stroke: #30363d;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; background: var(--bg); color: var(--fg); line-height: 1.5; }
+    .plugin-page { max-width: 100%; }
+    .plugin-bar { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--panel); }
+    .brand-mark { width: 28px; height: 28px; background: var(--primary); color: #fff; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; }
+    .plugin-bar h1 { font-size: 16px; font-weight: 600; flex: 1; }
+    .live-badge { font-size: 12px; color: var(--muted); }
+    .live-badge.live { color: var(--success); }
+    .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); background: var(--panel); padding: 0 12px; }
+    .tab { padding: 10px 16px; font-size: 13px; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; transition: color 0.15s, border-color 0.15s; background: none; border-top: none; border-left: none; border-right: none; font-family: inherit; }
+    .tab:hover { color: var(--fg); }
+    .tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+    .plugin-body { padding: 16px; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+    .card-title { font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin-bottom: 8px; }
+    .card-value { font-size: 28px; font-weight: 700; }
+    .card-value.green { color: var(--success); }
+    .card-value.yellow { color: var(--warn); }
+    .card-value.red { color: var(--error); }
+    .card-row { display: flex; gap: 12px; flex-wrap: wrap; }
+    .card-row .card { flex: 1; min-width: 160px; }
+
+    .empty-state { text-align: center; padding: 40px 20px; color: var(--muted); }
+    .empty-state svg { width: 48px; height: 48px; opacity: 0.4; margin-bottom: 12px; }
+    .empty-state h3 { font-size: 16px; margin-bottom: 6px; color: var(--fg); }
+    .empty-state p { font-size: 13px; max-width: 400px; margin: 0 auto; }
+    .empty-state code { background: var(--panel); padding: 2px 6px; border-radius: 3px; font-size: 12px; }
+
+    .chart-container { margin: 12px 0; }
+    .chart-container svg { width: 100%; height: auto; }
+
+    .bar-chart { display: flex; flex-direction: column; gap: 6px; }
+    .bar-row { display: flex; align-items: center; gap: 8px; }
+    .bar-label { width: 180px; font-size: 13px; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--fg); flex-shrink: 0; }
+    .bar-track { flex: 1; height: 24px; background: var(--panel); border-radius: 4px; overflow: hidden; position: relative; }
+    .bar-fill { height: 100%; background: var(--bar-fill); border-radius: 4px; transition: width 0.4s ease; display: flex; align-items: center; padding-left: 8px; }
+    .bar-fill.purple { background: #bc8cff; }
+    .bar-fill.teal { background: #56d4dd; }
+    .bar-fill.orange { background: #d29922; }
+    .bar-fill.green { background: var(--success); }
+    .bar-fill.pink { background: #f778ba; }
+    .bar-fill.blue { background: var(--primary); }
+    .bar-fill span { font-size: 11px; color: #fff; font-weight: 600; white-space: nowrap; }
+
+    .donut-wrap { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
+    .donut-legend { display: flex; flex-direction: column; gap: 6px; }
+    .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+    .legend-dot { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+    .legend-cost { margin-left: auto; color: var(--muted); font-size: 11px; }
+
+    .budget-card { display: flex; flex-direction: column; gap: 6px; padding: 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; }
+    .budget-head { display: flex; justify-content: space-between; font-size: 13px; }
+    .budget-name { font-weight: 600; }
+    .budget-pct { color: var(--muted); }
+    .budget-bar { height: 8px; background: var(--bg); border-radius: 4px; overflow: hidden; }
+    .budget-fill { height: 100%; border-radius: 4px; transition: width 0.4s ease; }
+    .budget-fill.safe { background: var(--success); }
+    .budget-fill.warn { background: var(--warn); }
+    .budget-fill.critical { background: var(--error); }
+    .budget-meta { font-size: 11px; color: var(--muted); display: flex; justify-content: space-between; }
+
+    .alerts-list { margin-top: 8px; }
+    .alert-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: rgba(210,153,34,0.1); border: 1px solid rgba(210,153,34,0.3); border-radius: 6px; font-size: 13px; margin-bottom: 4px; }
+    .alert-item.critical { background: rgba(248,81,73,0.1); border-color: rgba(248,81,73,0.3); }
+    .alert-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .alert-dot.warn { background: var(--warn); }
+    .alert-dot.critical { background: var(--error); }
+
+    .config-grid { display: grid; gap: 12px; margin: 16px 0; }
+    .config-field { display: flex; flex-direction: column; gap: 4px; }
+    .config-field label { font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 6px; }
+    .config-field label .required { color: var(--error); font-weight: 700; }
+    .config-field input, .config-field select {
+      padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px;
+      font-size: 13px; background: var(--panel); color: var(--fg);
+    }
+    .config-field input:focus, .config-field select:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 0 2px rgba(88,166,255,0.15); }
+    .config-field .help { font-size: 11px; color: var(--muted); }
+    .status-badge { display: inline-block; padding: 3px 10px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+    .status-badge.ok { background: rgba(63,185,80,0.15); color: var(--success); }
+    .status-badge.missing { background: rgba(210,153,34,0.15); color: var(--warn); }
+    .save-btn { padding: 8px 20px; background: var(--primary); color: #fff; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; }
+    .save-btn:hover { filter: brightness(1.1); }
+    .save-btn:disabled { opacity: 0.5; cursor: default; }
+    .save-feedback { font-size: 13px; margin-top: 8px; }
+    .save-feedback.ok { color: var(--success); }
+    .save-feedback.err { color: var(--error); }
+    .section-subtitle { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
+    .cost-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+    .cost-table th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; }
+    .cost-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
+    .cost-table tr:last-child td { border-bottom: none; }
+    .cost-table .total-row { font-weight: 700; border-top: 2px solid var(--border); }
+    .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .resource-group { margin-bottom: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--card-bg); }
+    .resource-group summary { display: flex; align-items: center; gap: 10px; padding: 10px 14px; cursor: pointer; font-size: 13px; font-weight: 600; }
+    .resource-group summary::-webkit-details-marker { color: var(--muted); }
+    .resource-type-total { margin-left: auto; color: var(--muted); font-weight: 400; font-size: 12px; }
+    .resource-type-bar { width: 80px; height: 6px; background: var(--panel); border-radius: 3px; overflow: hidden; flex-shrink: 0; }
+    .resource-type-fill { height: 100%; border-radius: 3px; }
+    .resource-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .resource-table th { padding: 6px 10px; text-align: left; border-top: 1px solid var(--border); background: var(--panel); color: var(--muted); font-size: 11px; text-transform: uppercase; }
+    .resource-table td { padding: 6px 10px; border-top: 1px solid var(--border); }
+    .tag-chip { display: inline-block; padding: 1px 6px; font-size: 10px; border-radius: 3px; background: rgba(88,166,255,0.12); color: var(--primary); margin: 0 2px; }
+    .region-badge { font-size: 11px; color: var(--muted); }
+    .rg-badge { font-size: 11px; color: #56d4dd; }
+    .trend-chart { margin: 12px 0; }
+    .trend-chart svg { width: 100%; height: auto; }
+    .dimension-select { padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; background: var(--panel); color: var(--fg); margin-bottom: 12px; }
+    .dimension-panel { display: none; }
+    .dimension-panel.active { display: block; }
+    .three-landscape { height: 340px; min-height: 260px; overflow: hidden; border: 1px solid var(--border); border-radius: 6px; background: #101827; }
+    .three-landscape canvas { display: block; width: 100%; height: 100%; }
+    .three-legend { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 10px; color: var(--muted); font-size: 11px; }
+    .three-legend span { white-space: nowrap; }
+  </style>
+</head>
+<body>
+  <div class="plugin-page">
+    <header class="plugin-bar">
+      <span class="brand-mark">A</span>
+      <h1>Azure Cost Analyzer</h1>
+      <span class="live-badge" id="liveBadge">· connecting…</span>
+    </header>
+
+    <div class="tabs" id="tabBar" role="tablist">
+      <button class="tab active" data-tab="overview" role="tab" aria-selected="true">Overview</button>
+      <button class="tab" data-tab="services" role="tab" aria-selected="false">Cost by Service</button>
+      <button class="tab" data-tab="resources" role="tab" aria-selected="false">Resources by Type</button>
+      <button class="tab" data-tab="slicedice" role="tab" aria-selected="false">Slice &amp; Dice</button>
+      <button class="tab" data-tab="budgets" role="tab" aria-selected="false">Budgets</button>
+      <button class="tab" data-tab="settings" role="tab" aria-selected="false">Settings</button>
+    </div>
+
+    <div class="plugin-body">
+      <!-- ── OVERVIEW ── -->
+      <section class="tab-panel active" id="panelOverview" role="tabpanel">
+        <div id="overviewContent"></div>
+      </section>
+
+      <!-- ── COST BY SERVICE ── -->
+      <section class="tab-panel" id="panelServices" role="tabpanel">
+        <div id="servicesContent"></div>
+      </section>
+
+      <!-- ── RESOURCES BY TYPE ── -->
+      <section class="tab-panel" id="panelResources" role="tabpanel">
+        <div id="resourcesContent"></div>
+      </section>
+
+      <!-- ── SLICE & DICE ── -->
+      <section class="tab-panel" id="panelSlicedice" role="tabpanel">
+        <div id="slicediceContent"></div>
+      </section>
+
+      <!-- ── BUDGETS ── -->
+      <section class="tab-panel" id="panelBudgets" role="tabpanel">
+        <div id="budgetsContent"></div>
+      </section>
+
+      <!-- ── SETTINGS ── -->
+      <section class="tab-panel" id="panelSettings" role="tabpanel">
+        <div class="status-badge" id="statusBadge">Checking configuration…</div>
+        <h3 style="margin-top:16px;">Azure Credentials</h3>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:12px;">
+          Enter your Azure service principal credentials. Stored in local plugin state — the LLM never reads them.
+        </p>
+        <div class="config-grid" id="configForm"></div>
+        <button class="save-btn" id="saveBtn" disabled>Save</button>
+        <div id="saveFeedback" class="save-feedback"></div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    const PLUGIN = 'azure-cost-analyzer';
+    const token = (() => {
+      try { return new URLSearchParams(location.search).get('token') || ''; } catch { return ''; }
+    })();
+
+    let dataCache = {};
+    let workplaneCache = null;
+    let renderTimer = null;
+    let disposeThreeScenes = [];
+
+    // ── State API wrapper ──
+    async function state(op, extra = {}) {
+      const res = await fetch('/api/plugin-state/' + PLUGIN, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Bahulam-Local-Token': token },
+        body: JSON.stringify({ op, ...extra }),
+      });
+      const body = await res.json();
+      if (!res.ok || body.ok === false) throw new Error(body.error || body.message || 'state op failed');
+      return body.result;
+    }
+
+    // ── Currency formatting ──
+    function fmtCost(amount, currency) {
+      try { return new Intl.NumberFormat('en-US', { style: 'currency', currency: currency || 'USD', minimumFractionDigits: 2 }).format(amount); }
+      catch { return (currency || '$') + Number(amount).toFixed(2); }
+    }
+    function fmtPct(n) { return Number(n).toFixed(1) + '%'; }
+
+    // ── SVG helpers ──
+    function donutChart(segments, total, currency) {
+      if (!segments || !segments.length || !total) return '<div class="empty-state"><p>No cost data to visualize.</p></div>';
+      const colors = ['#58a6ff','#bc8cff','#56d4dd','#d29922','#3fb950','#f778ba','#f85149','#8b949e'];
+      const r = 60, cx = 70, cy = 70, circ = 2 * Math.PI * r;
+      let cumulative = 0;
+      const arcs = segments.map((s, i) => {
+        const pct = s.cost / total;
+        const offset = cumulative * circ;
+        const len = pct * circ;
+        cumulative += pct;
+        return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${colors[i % colors.length]}" stroke-width="20" stroke-dasharray="${len} ${circ - len}" stroke-dashoffset="${-offset}" transform="rotate(-90 ${cx} ${cy})"/>`;
+      }).join('');
+      const legends = segments.map((s, i) =>
+        `<div class="legend-item"><span class="legend-dot" style="background:${colors[i % colors.length]}"></span>${s.name}<span class="legend-cost">${fmtCost(s.cost, currency)}</span></div>`
+      ).join('');
+      return `<div class="donut-wrap">
+        <svg width="140" height="140" viewBox="0 0 140 140">
+          <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--donut-stroke)" stroke-width="20"/>
+          ${arcs}
+          <text x="${cx}" y="${cy - 4}" text-anchor="middle" fill="var(--fg)" font-size="16" font-weight="700">${fmtCost(total, currency)}</text>
+          <text x="${cx}" y="${cy + 14}" text-anchor="middle" fill="var(--muted)" font-size="10">total</text>
+        </svg>
+        <div class="donut-legend">${legends}</div>
+      </div>`;
+    }
+
+    function barChart(services, total, currency) {
+      if (!services || !services.length) return '<div class="empty-state"><p>Run <code>azure_cost_by_service</code> to see breakdown.</p></div>';
+      const maxCost = Math.max(...services.map(s => s.cost));
+      const colorWheel = ['#1f6feb','#bc8cff','#56d4dd','#d29922','#3fb950','#f778ba','#1f6feb','#8b949e'];
+      const bars = services.map((s, i) => {
+        const pct = Math.max(3, (s.cost / maxCost) * 100);
+        return `<div class="bar-row">
+          <div class="bar-label" title="${s.name}">${s.name}</div>
+          <div class="bar-track">
+            <div class="bar-fill" style="width:${pct}%;background:${colorWheel[i % colorWheel.length]}"><span>${fmtCost(s.cost, currency)}</span></div>
+          </div>
+        </div>`;
+      }).join('');
+      return `<div class="bar-chart">${bars}</div>
+        <div style="text-align:right;font-size:12px;color:var(--muted);margin-top:4px;">Total: ${fmtCost(total, currency)}</div>`;
+    }
+
+    function budgetBars(budgets, alerts, currency) {
+      if (!budgets || !budgets.length) return '<div class="empty-state"><p>Run <code>azure_budget_alerts</code> to see budget status.</p></div>';
+      const bars = budgets.map(b => {
+        const cls = b.percent >= 80 ? 'critical' : b.percent >= 50 ? 'warn' : 'safe';
+        return `<div class="budget-card">
+          <div class="budget-head">
+            <span class="budget-name">${b.name}</span>
+            <span class="budget-pct">${fmtPct(b.percent)}</span>
+          </div>
+          <div class="budget-bar"><div class="budget-fill ${cls}" style="width:${Math.min(100, b.percent)}%"></div></div>
+          <div class="budget-meta">
+            <span>${fmtCost(b.consumed, currency)} spent</span>
+            <span>of ${fmtCost(b.amount, currency)}</span>
+          </div>
+        </div>`;
+      }).join('');
+      let alertsHtml = '';
+      if (alerts && alerts.length) {
+        alertsHtml = '<div class="alerts-list">' + alerts.map(a =>
+          `<div class="alert-item ${a.severity === 'critical' ? 'critical' : ''}">
+            <span class="alert-dot ${a.severity === 'critical' ? 'critical' : 'warn'}"></span>
+            <span>${a.message}</span>
+          </div>`
+        ).join('') + '</div>';
+      }
+      return bars + alertsHtml;
+    }
+
+    function renderTable(services, currency) {
+      if (!services || !services.length) return '';
+      const rows = services.map(s =>
+        `<tr><td>${s.name}</td><td class="num">${fmtCost(s.cost, currency)}</td></tr>`
+      ).join('');
+      const total = services.reduce((a, s) => a + s.cost, 0);
+      return `<table class="cost-table">
+        <tr><th>Service</th><th class="num">Cost</th></tr>
+        ${rows}
+        <tr class="total-row"><td>Total</td><td class="num">${fmtCost(total, currency)}</td></tr>
+      </table>`;
+    }
+
+    // ── Declarative workplane renderer ──
+    // Widget content is rendered with DOM APIs, not agent-provided HTML.
+    function widgetText(value) { return document.createTextNode(String(value ?? '')); }
+    function formatWidgetValue(value, format, currency) {
+      if (format === 'currency') return fmtCost(value, currency);
+      if (format === 'percent') return fmtPct(value);
+      return String(value ?? '');
+    }
+    function workplaneCard(widget) {
+      const card = document.createElement('section');
+      card.className = 'card';
+      if (widget.title) { const title = document.createElement('div'); title.className = 'card-title'; title.appendChild(widgetText(widget.title)); card.appendChild(title); }
+      return card;
+    }
+    function clearThreeScenes() {
+      for (const dispose of disposeThreeScenes.splice(0)) dispose();
+    }
+    function renderCostLandscape(widget, card) {
+      const rows = Array.isArray(widget.scene?.data) ? widget.scene.data : [];
+      const host = document.createElement('div'); host.className = 'three-landscape'; host.setAttribute('aria-label', widget.title || 'Interactive Azure cost landscape');
+      const legend = document.createElement('div'); legend.className = 'three-legend';
+      for (const row of rows) { const item = document.createElement('span'); item.appendChild(widgetText(`${row.label}: ${formatWidgetValue(row.value, widget.format, widget.currency)}`)); legend.appendChild(item); }
+      card.append(host, legend);
+      let disposed = false, renderer = null, frame = null, observer = null;
+      const dispose = () => { disposed = true; if (frame) cancelAnimationFrame(frame); observer?.disconnect(); renderer?.dispose(); renderer?.domElement.remove(); };
+      disposeThreeScenes.push(dispose);
+      import('https://unpkg.com/three@0.160.0/build/three.module.js').then(THREE => {
+        if (disposed || !host.isConnected) return;
+        const scene = new THREE.Scene(); scene.background = new THREE.Color('#101827');
+        const camera = new THREE.PerspectiveCamera(44, 1, 0.1, 100); camera.position.set(8, 7, 10); camera.lookAt(0, 0, 0);
+        renderer = new THREE.WebGLRenderer({ antialias: true }); renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); host.appendChild(renderer.domElement);
+        scene.add(new THREE.HemisphereLight(0xb9d9ff, 0x18222d, 2));
+        const light = new THREE.DirectionalLight(0xffffff, 2.5); light.position.set(6, 9, 6); scene.add(light);
+        const grid = new THREE.GridHelper(12, 12, 0x34415c, 0x253048); scene.add(grid);
+        const max = Math.max(1, ...rows.map(row => Number(row.value) || 0));
+        const group = new THREE.Group(); scene.add(group);
+        rows.forEach((row, index) => {
+          const height = Math.max(.18, Number(row.value) / max * 5);
+          const geometry = new THREE.BoxGeometry(.85, height, .85);
+          const material = new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(.58 - index / Math.max(1, rows.length) * .22, .7, .53), roughness: .38, metalness: .2 });
+          const bar = new THREE.Mesh(geometry, material); bar.position.set((index - (rows.length - 1) / 2) * 1.15, height / 2, 0); group.add(bar);
+        });
+        const resize = () => { const width = Math.max(280, host.clientWidth), height = Math.max(260, host.clientHeight); renderer.setSize(width, height, false); camera.aspect = width / height; camera.updateProjectionMatrix(); };
+        observer = new ResizeObserver(resize); observer.observe(host); resize();
+        const animate = () => { if (disposed || !host.isConnected) { dispose(); return; } group.rotation.y += .0035; renderer.render(scene, camera); frame = requestAnimationFrame(animate); }; animate();
+      }).catch(() => { if (!disposed) host.appendChild(widgetText('3D preview could not load. Check your network connection and try again.')); });
+    }
+    function renderWorkplane(plane) {
+      const el = document.getElementById('overviewContent');
+      clearThreeScenes();
+      el.replaceChildren();
+      const widgets = Array.isArray(plane?.widgets) ? plane.widgets : [];
+      if (!widgets.length) return false;
+      const metrics = widgets.filter(widget => widget.type === 'metric');
+      if (metrics.length) {
+        const row = document.createElement('div'); row.className = 'card-row';
+        for (const widget of metrics) {
+          const card = workplaneCard(widget); const value = document.createElement('div');
+          value.className = 'card-value' + (widget.tone === 'success' ? ' green' : widget.tone === 'warning' ? ' yellow' : widget.tone === 'danger' ? ' red' : '');
+          value.appendChild(widgetText(formatWidgetValue(widget.value, widget.format, widget.currency)));
+          card.appendChild(value); row.appendChild(card);
+        }
+        el.appendChild(row);
+      }
+      for (const widget of widgets.filter(widget => widget.type !== 'metric')) {
+        const card = workplaneCard(widget);
+        if (widget.type === 'bar_chart') {
+          const rows = Array.isArray(widget.data) ? widget.data : [];
+          const max = Math.max(1, ...rows.map(row => Number(row.value) || 0));
+          const chart = document.createElement('div'); chart.className = 'bar-chart';
+          for (const row of rows) {
+            const item = document.createElement('div'); item.className = 'bar-row';
+            const label = document.createElement('div'); label.className = 'bar-label'; label.appendChild(widgetText(row.label));
+            const track = document.createElement('div'); track.className = 'bar-track';
+            const fill = document.createElement('div'); fill.className = 'bar-fill'; fill.style.width = Math.max(3, Math.min(100, Number(row.value) / max * 100)) + '%';
+            const value = document.createElement('span'); value.appendChild(widgetText(formatWidgetValue(row.value, widget.format, widget.currency))); fill.appendChild(value);
+            track.appendChild(fill); item.append(label, track); chart.appendChild(item);
+          }
+          card.appendChild(chart);
+        } else if (widget.type === 'line_chart') {
+          const rows = Array.isArray(widget.data) ? widget.data : [];
+          const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.setAttribute('viewBox', '0 0 600 180'); svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', widget.title || 'Trend chart');
+          if (rows.length > 1) {
+            const values = rows.map(row => Number(row.value) || 0), min = Math.min(...values), max = Math.max(...values), range = Math.max(.01, max - min);
+            const points = values.map((value, index) => `${10 + index / (values.length - 1) * 580},${160 - (value - min) / range * 140}`).join(' ');
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline'); line.setAttribute('points', points); line.setAttribute('fill', 'none'); line.setAttribute('stroke', 'var(--primary)'); line.setAttribute('stroke-width', '3'); svg.appendChild(line);
+          }
+          card.appendChild(svg);
+        } else if (widget.type === 'table') {
+          const table = document.createElement('table'); table.className = 'cost-table'; const head = document.createElement('tr');
+          for (const column of (widget.columns || [])) { const cell = document.createElement('th'); cell.appendChild(widgetText(column)); head.appendChild(cell); } table.appendChild(head);
+          for (const row of (widget.rows || [])) { const tr = document.createElement('tr'); row.forEach((value, index) => { const cell = document.createElement('td'); if (index > 0) cell.className = 'num'; cell.appendChild(widgetText(formatWidgetValue(value, widget.format?.[index], widget.currency))); tr.appendChild(cell); }); table.appendChild(tr); }
+          card.appendChild(table);
+        } else if (widget.type === 'alert') {
+          const alert = document.createElement('div'); alert.className = 'alert-item' + (widget.tone === 'danger' ? ' critical' : ''); alert.appendChild(widgetText(widget.message)); card.appendChild(alert);
+        } else if (widget.type === 'three_scene') {
+          renderCostLandscape(widget, card);
+        } else { continue; }
+        el.appendChild(card);
+      }
+      return true;
+    }
+
+    // ── Render functions per tab ──
+    function renderOverview(d) {
+      const el = document.getElementById('overviewContent');
+      if (renderWorkplane(workplaneCache)) return;
+      if (!d || (!d.mtd_cost && !d.services)) {
+        el.innerHTML = `<div class="empty-state">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3v18h18"/><path d="M7 16l4-8 4 4 4-6"/></svg>
+          <h3>No cost data yet</h3>
+          <p>Ask the agent to run <code>azure_list_subscriptions</code>, <code>azure_cost_by_service</code>, or <code>azure_budget_alerts</code> to populate the dashboard.</p>
+        </div>`;
+        return;
+      }
+      const cur = d.currency || 'USD';
+      let cards = '';
+      if (d.mtd_cost) {
+        const pct = d.budget ? d.budget.consumed_percent : null;
+        cards += `<div class="card-row">`;
+        cards += `<div class="card"><div class="card-title">Month-to-Date Cost</div><div class="card-value">${fmtCost(d.mtd_cost.amount, cur)}</div></div>`;
+        if (d.budget) {
+          const cls = pct >= 80 ? 'red' : pct >= 50 ? 'yellow' : 'green';
+          cards += `<div class="card"><div class="card-title">Budget Usage</div><div class="card-value ${cls}">${fmtPct(pct)}</div></div>`;
+          cards += `<div class="card"><div class="card-title">Monthly Budget</div><div class="card-value">${fmtCost(d.budget.amount, cur)}</div></div>`;
+        }
+        cards += `</div>`;
+      }
+      const donut = d.services ? donutChart(d.services, d.total_by_service || d.services.reduce((a, s) => a + s.cost, 0), cur) : '';
+      const trend = d.daily_costs ? trendChart(d.daily_costs, cur) : '';
+      let content = cards;
+      if (donut) content += `<div class="card"><div class="card-title">Cost Distribution</div>${donut}</div>`;
+      content += trend;
+      el.innerHTML = content;
+    }
+
+    function renderServices(d) {
+      const el = document.getElementById('servicesContent');
+      if (!d || !d.services) {
+        el.innerHTML = `<div class="empty-state">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+          <h3>No service breakdown yet</h3>
+          <p>Ask the agent to run <code>azure_cost_by_service</code> to see costs by Azure service.</p>
+        </div>`;
+        return;
+      }
+      const cur = d.currency || 'USD';
+      const total = d.total_by_service || d.services.reduce((a, s) => a + s.cost, 0);
+      const period = d.period_days ? `Last ${d.period_days} days` : 'Current billing period';
+      el.innerHTML = `<div class="section-subtitle">${period}</div>
+        ${barChart(d.services, total, cur)}
+        <div class="card" style="margin-top:12px;">${renderTable(d.services, cur)}</div>`;
+    }
+
+    function renderBudgets(d) {
+      const el = document.getElementById('budgetsContent');
+      if (!d || !d.budgets) {
+        el.innerHTML = `<div class="empty-state">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2v20M2 12h20"/><circle cx="12" cy="12" r="10"/></svg>
+          <h3>No budget data yet</h3>
+          <p>Ask the agent to run <code>azure_budget_alerts</code> to see budget status and alerts.</p>
+        </div>`;
+        return;
+      }
+      const cur = d.currency || 'USD';
+      el.innerHTML = `<div class="section-subtitle">Alert threshold: ${d.threshold_percent || 80}%</div>
+        ${budgetBars(d.budgets, d.alerts, cur)}`;
+    }
+
+    // ── SVG trend chart ──
+    function trendChart(dailyCosts, currency) {
+      if (!dailyCosts || dailyCosts.length < 2) return '';
+      const w = 600, h = 200, padX = 10, padTop = 10, padBot = 25;
+      const chartW = w - padX * 2, chartH = h - padTop - padBot;
+      const maxCost = Math.max(...dailyCosts.map(d => d.cost));
+      const minCost = Math.min(...dailyCosts.map(d => d.cost));
+      const range = Math.max(maxCost - minCost, 0.01);
+      const points = dailyCosts.map((d, i) => {
+        const x = padX + (i / (dailyCosts.length - 1)) * chartW;
+        const y = padTop + chartH - ((d.cost - minCost) / range) * chartH * 0.9 - chartH * 0.05;
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      }).join(' ');
+      const yLabels = [maxCost, (maxCost + minCost) / 2, minCost].map(v => ({
+        y: padTop + chartH - ((v - minCost) / range) * chartH * 0.9 - chartH * 0.05,
+        label: fmtCost(v, currency),
+      })).join('');
+      const total = dailyCosts.reduce((s, d) => s + d.cost, 0);
+      return `<div class="card"><div class="card-title">Cost Trend (${dailyCosts.length} days · Total ${fmtCost(total, currency)})</div>
+        <div class="trend-chart">
+          <svg viewBox="0 0 ${w} ${h}">
+            <rect x="${padX}" y="${padTop}" width="${chartW}" height="${chartH}" fill="none" stroke="var(--donut-stroke)" stroke-width="0.5"/>
+            <polyline points="${points}" fill="none" stroke="var(--primary)" stroke-width="2"/>
+            <circle cx="${points.length > 0 ? points.split(' ').pop().split(',')[0] : 0}" cy="${points.length > 0 ? points.split(' ').pop().split(',')[1] : 0}" r="3" fill="var(--primary)"/>
+            <text x="${w / 2}" y="${h - 2}" text-anchor="middle" fill="var(--muted)" font-size="9">Days (${dailyCosts[0]?.date || ''} – ${dailyCosts[dailyCosts.length - 1]?.date || ''})</text>
+          </svg>
+        </div></div>`;
+    }
+
+    // ── Resource types rendering ──
+    function renderResources(d) {
+      const el = document.getElementById('resourcesContent');
+      if (!d || !d.resource_types) {
+        el.innerHTML = `<div class="empty-state">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 20h16M4 20V4m0 16L20 4"/></svg>
+          <h3>No resource breakdown yet</h3>
+          <p>Ask the agent to run <code>azure_resources_by_type</code> to see resources grouped by type.</p>
+        </div>`;
+        return;
+      }
+      const cur = d.currency || 'USD';
+      const total = d.total_by_resource_type || d.resource_types.reduce((s, g) => s + g.total, 0);
+      const maxGroupTotal = Math.max(...d.resource_types.map(g => g.total));
+      const colorWheel = ['#58a6ff','#bc8cff','#56d4dd','#d29922','#3fb950','#f778ba','#f85149','#8b949e'];
+      const groups = d.resource_types.map((g, gi) => {
+        const pct = Math.max(3, (g.total / maxGroupTotal) * 100);
+        const resources = (g.resources || []).map((r, ri) =>
+          `<tr><td>${r.name}</td><td><span class="region-badge">${r.region}</span></td><td><span class="rg-badge">${r.resource_group}</span></td><td>${Object.entries(r.tags || {}).map(([k,v]) => `<span class="tag-chip">${k}:${v}</span>`).join(' ')}</td><td class="num">${fmtCost(r.cost, cur)}</td></tr>`
+        ).join('');
+        const rowColor = colorWheel[gi % colorWheel.length];
+        return `<details class="resource-group">
+          <summary>
+            <span style="color:${rowColor}">▦</span>
+            ${g.type}
+            <span class="resource-type-bar"><span class="resource-type-fill" style="width:${pct}%;background:${rowColor}"></span></span>
+            <span class="resource-type-total">${g.resources.length} resources · ${fmtCost(g.total, cur)}</span>
+          </summary>
+          <table class="resource-table">
+            <tr><th>Resource</th><th>Region</th><th>Resource Group</th><th>Tags</th><th class="num">Cost</th></tr>
+            ${resources}
+          </table>
+        </details>`;
+      }).join('');
+      el.innerHTML = `<div class="section-subtitle">${d.period_days ? `Last ${d.period_days} days` : ''} · Total: ${fmtCost(total, cur)}</div>${groups}`;
+    }
+
+    // ── Slice & Dice rendering ──
+    function renderSliceDice(d) {
+      const el = document.getElementById('slicediceContent');
+      if (!d || !d.cost_by_dimension) {
+        el.innerHTML = `<div class="empty-state">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+          <h3>No dimension data yet</h3>
+          <p>Ask the agent to run <code>azure_cost_by_dimension</code> to slice costs by region, resource group, tags, or resource type.</p>
+        </div>`;
+        return;
+      }
+      const cur = d.currency || 'USD';
+      const dimLabels = { region: 'Region', resource_group: 'Resource Group', tag: 'Tag', resource_type: 'Resource Type' };
+      const dims = ['region', 'resource_group', 'tag', 'resource_type'];
+      const colorWheel = ['#58a6ff','#bc8cff','#56d4dd','#d29922','#3fb950','#f778ba','#1f6feb','#8b949e'];
+
+      // Build selector
+      const selectOpts = dims.map(dim => `<option value="${dim}">${dimLabels[dim]}</option>`).join('');
+      let html = `<select class="dimension-select" id="dimensionSelect">${selectOpts}</select>`;
+
+      // Pre-render all dimension panels
+      html += dims.map((dim, di) => {
+        const items = d.cost_by_dimension[dim];
+        if (!items || !items.length) return '';
+        const maxCost = Math.max(...items.map(i => i.cost));
+        const bars = items.map((item, i) => {
+          const pct = Math.max(3, (item.cost / maxCost) * 100);
+          return `<div class="bar-row">
+            <div class="bar-label" title="${item.value}">${item.value}</div>
+            <div class="bar-track">
+              <div class="bar-fill" style="width:${pct}%;background:${colorWheel[i % colorWheel.length]}"><span>${fmtCost(item.cost, cur)}</span></div>
+            </div>
+          </div>`;
+        }).join('');
+        const total = items.reduce((s, i) => s + i.cost, 0);
+        const rows = items.map(i => `<tr><td>${i.value}</td><td class="num">${fmtCost(i.cost, cur)}</td><td class="num">${i.pct ? fmtPct(i.pct) : ''}</td></tr>`).join('');
+        return `<div class="dimension-panel ${di === 0 ? 'active' : ''}" data-dimension="${dim}">
+          <div class="section-subtitle">Aggregated by ${dimLabels[dim]} · Total ${fmtCost(total, cur)}</div>
+          <div class="bar-chart">${bars}</div>
+          <table class="cost-table" style="margin-top:8px;">
+            <tr><th>${dimLabels[dim]}</th><th class="num">Cost</th><th class="num">%</th></tr>
+            ${rows}
+          </table>
+        </div>`;
+      }).join('');
+
+      el.innerHTML = html;
+    }
+
+    function renderAll() {
+      renderOverview(dataCache);
+      renderServices(dataCache);
+      renderResources(dataCache);
+      renderSliceDice(dataCache);
+      renderBudgets(dataCache);
+    }
+
+    // ── Data loading ──
+    async function loadDashboard() {
+      try {
+        const [result, workplane] = await Promise.all([state('get', { key: 'dashboard_data' }), state('get', { key: 'workplane' })]);
+        if (result && typeof result === 'object') {
+          dataCache = result;
+        } else {
+          dataCache = {};
+        }
+        workplaneCache = workplane && typeof workplane === 'object' ? workplane : null;
+      } catch {
+        dataCache = {};
+        workplaneCache = null;
+      }
+      renderAll();
+    }
+
+    // ── Settings / Config ──
+    async function loadConfig() {
+      try {
+        const res = await fetch('/api/plugin-config/' + PLUGIN, {
+          headers: { 'X-Bahulam-Local-Token': token },
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(data.error || 'config load failed');
+
+        const form = document.getElementById('configForm');
+        form.innerHTML = '';
+
+        for (const field of data.fields) {
+          const val = data.values[field.name] ?? '';
+          const label = document.createElement('label');
+          label.htmlFor = 'cfg_' + field.name;
+          label.textContent = field.label || field.name;
+          if (field.required) {
+            const star = document.createElement('span');
+            star.className = 'required';
+            star.textContent = ' *';
+            label.appendChild(star);
+          }
+
+          let input;
+          if (field.type === 'select') {
+            input = document.createElement('select');
+            input.id = 'cfg_' + field.name;
+            const ph = document.createElement('option');
+            ph.value = '';
+            ph.textContent = field.placeholder || 'Select...';
+            input.appendChild(ph);
+            for (const opt of (field.options || [])) {
+              const el = document.createElement('option');
+              el.value = opt;
+              el.textContent = opt;
+              if (opt === val) el.selected = true;
+              input.appendChild(el);
+            }
+          } else if (field.type === 'password' || field.credential) {
+            input = document.createElement('input');
+            input.type = 'password';
+            input.id = 'cfg_' + field.name;
+            input.placeholder = val === '***set***' ? '(already set)' : (field.placeholder || '');
+          } else {
+            input = document.createElement('input');
+            input.type = 'text';
+            input.id = 'cfg_' + field.name;
+            input.placeholder = field.placeholder || '';
+            input.value = val !== '***set***' && val !== null ? val : '';
+          }
+          input.dataset.original = val;
+          input.addEventListener('input', () => document.getElementById('saveBtn').disabled = false);
+          input.addEventListener('change', () => document.getElementById('saveBtn').disabled = false);
+
+          const desc = document.createElement('span');
+          desc.className = 'help';
+          desc.textContent = field.description || '';
+
+          const wrap = document.createElement('div');
+          wrap.className = 'config-field';
+          wrap.appendChild(label);
+          wrap.appendChild(input);
+          if (desc.textContent) wrap.appendChild(desc);
+          form.appendChild(wrap);
+        }
+
+        const badge = document.getElementById('statusBadge');
+        if (data.configured) {
+          badge.className = 'status-badge ok';
+          badge.textContent = '✓ Configured';
+        } else {
+          badge.className = 'status-badge missing';
+          badge.textContent = 'Missing: ' + data.missing.join(', ');
+        }
+      } catch (err) {
+        document.getElementById('statusBadge').textContent = 'Error: ' + err.message;
+        document.getElementById('statusBadge').className = 'status-badge missing';
+      }
+    }
+
+    document.getElementById('saveBtn').addEventListener('click', async () => {
+      const btn = document.getElementById('saveBtn');
+      const feedback = document.getElementById('saveFeedback');
+      btn.disabled = true;
+      feedback.textContent = 'Saving…';
+      feedback.className = 'save-feedback';
+
+      try {
+        const updates = {};
+        for (const input of document.querySelectorAll('#configForm input, #configForm select')) {
+          const key = input.id.replace('cfg_', '');
+          let value = input.value;
+          // An unchanged credential stays in local state; it is never read
+          // back into the panel merely to submit the form again.
+          if (input.type === 'password' && !value && input.dataset.original === '***set***') continue;
+          updates[key] = value;
+        }
+        const res = await fetch('/api/plugin-config/' + PLUGIN, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Bahulam-Local-Token': token },
+          body: JSON.stringify({ values: updates }),
+        });
+        const saved = await res.json();
+        if (!res.ok || !saved.ok) throw new Error(saved.error || saved.message || 'config save failed');
+        feedback.textContent = '✓ Saved';
+        feedback.className = 'save-feedback ok';
+        btn.disabled = true;
+        await loadConfig();
+      } catch (err) {
+        feedback.textContent = '✗ ' + err.message;
+        feedback.className = 'save-feedback err';
+        btn.disabled = false;
+      }
+    });
+
+    // ── Slice & Dice dimension selector (event delegation on stable panel) ──
+    document.getElementById('panelSlicedice').addEventListener('change', (e) => {
+      if (!e.target.matches('#dimensionSelect')) return;
+      document.querySelectorAll('.dimension-panel').forEach(p => p.classList.remove('active'));
+      const active = document.querySelector(`.dimension-panel[data-dimension="${e.target.value}"]`);
+      if (active) active.classList.add('active');
+    });
+
+    // ── Tab switching ──
+    document.getElementById('tabBar').addEventListener('click', (e) => {
+      const btn = e.target.closest('.tab');
+      if (!btn) return;
+      document.querySelectorAll('.tab').forEach(t => {
+        t.classList.remove('active');
+        t.setAttribute('aria-selected', 'false');
+      });
+      btn.classList.add('active');
+      btn.setAttribute('aria-selected', 'true');
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      document.getElementById('panel' + btn.dataset.tab.charAt(0).toUpperCase() + btn.dataset.tab.slice(1)).classList.add('active');
+    });
+
+    // ── SSE live updates ──
+    const es = new EventSource('/api/events?token=' + encodeURIComponent(token));
+    es.addEventListener('open', () => {
+      document.getElementById('liveBadge').textContent = '· live';
+      document.getElementById('liveBadge').className = 'live-badge live';
+    });
+    es.addEventListener('error', () => {
+      document.getElementById('liveBadge').textContent = '· reconnecting…';
+      document.getElementById('liveBadge').className = 'live-badge';
+    });
+    es.addEventListener('plugin_state_changed', (ev) => {
+      let evt = {};
+      try { evt = JSON.parse(ev.data || '{}'); } catch {}
+      if (evt.data && evt.data.plugin !== PLUGIN) return;
+      if (renderTimer) clearTimeout(renderTimer);
+      renderTimer = setTimeout(() => { loadDashboard().catch(() => {}); }, 200);
+    });
+
+    // ── Boot ──
+    loadDashboard().catch(() => {});
+    loadConfig().catch(() => {});
+  </script>
+</body>
+</html>

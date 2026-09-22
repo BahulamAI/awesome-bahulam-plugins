@@ -1,0 +1,139 @@
+apiVersion: bahulam.plugin/1
+kind: Plugin
+metadata:
+  name: azure-cost-analyzer
+  version: 0.2.0
+  description: >
+    Azure Cost Management analysis plugin. Reads cost data from Azure
+    subscriptions, surfaces budget alerts, and generates cost reports.
+    Credentials are stored in local plugin state — the LLM never sees them.
+  author: BahulamAI
+  repository: https://github.com/BahulamAI/awesome-bahulam-plugins
+
+config:
+  # Gives the agent a typed widget-update tool. The runtime renders widgets;
+  # agents cannot inject HTML or executable chart code into this panel.
+  workplane: true
+
+  # Declared config fields: the workspace panel renders a settings form
+  # from this definition. Values are stored in the plugin's local SQLite
+  # KV table under the `_config` key. Tool handlers read them via
+  # `state.getConfig(fieldName)`.
+  config:
+    fields:
+      - name: subscription_id
+        type: string
+        label: "Azure Subscription ID"
+        required: true
+        credential: false
+        description: "The UUID of the Azure subscription to analyze"
+        placeholder: "00000000-0000-0000-0000-000000000000"
+      - name: tenant_id
+        type: string
+        label: "Azure Tenant ID"
+        required: true
+        credential: false
+        description: "Azure AD tenant ID for authentication"
+        placeholder: "00000000-0000-0000-0000-000000000000"
+      - name: client_id
+        type: string
+        label: "Service Principal Client ID"
+        required: true
+        credential: false
+        description: "App registration client ID with Cost Management Reader role"
+        placeholder: "00000000-0000-0000-0000-000000000000"
+      - name: client_secret
+        type: password
+        label: "Service Principal Secret"
+        required: true
+        credential: true
+        description: "Client secret for the service principal (stored locally, never sent to LLM)"
+        placeholder: ""
+      - name: currency
+        type: select
+        label: "Currency"
+        required: false
+        default: "USD"
+        options: ["USD", "EUR", "GBP", "INR", "JPY", "AUD"]
+        description: "Currency for cost display"
+
+  tools:
+    - name: azure_list_subscriptions
+      description: >
+        List accessible Azure subscriptions with current month-to-date cost.
+        Reads credentials from plugin config (never exposed to LLM).
+      tool: ./tools/list-subscriptions.mjs
+      parameters:
+        type: object
+        properties: {}
+
+    - name: azure_cost_by_service
+      description: >
+        Get cost breakdown by Azure service for the current billing period.
+        Reads credentials from plugin config.
+      tool: ./tools/cost-by-service.mjs
+      parameters:
+        type: object
+        properties:
+          days:
+            type: integer
+            description: Number of days to look back (default 30)
+
+    - name: azure_budget_alerts
+      description: >
+        Check configured Azure budgets and alert on any that exceed threshold.
+        Reads credentials from plugin config.
+      tool: ./tools/budget-alerts.mjs
+      parameters:
+        type: object
+        properties:
+          threshold_percent:
+            type: integer
+            description: Alert when budget consumed exceeds this percentage (default 80)
+
+    - name: azure_resources_by_type
+      description: >
+        Get Azure cost breakdown by resource type with individual resource
+        details including region, resource group, and tags. Drill-down view.
+      tool: ./tools/resources-by-type.mjs
+      parameters:
+        type: object
+        properties:
+          days:
+            type: integer
+            description: Number of days to look back (default 30)
+          filter_type:
+            type: string
+            description: Optional filter to a specific resource type
+
+    - name: azure_cost_by_dimension
+      description: >
+        Get Azure costs aggregated by a chosen dimension: region,
+        resource_group, tag, or resource_type. Slice-and-dice analysis.
+      tool: ./tools/cost-by-dimension.mjs
+      parameters:
+        type: object
+        properties:
+          dimension:
+            type: string
+            enum: [region, resource_group, tag, resource_type]
+            description: Dimension to aggregate by (default region)
+          days:
+            type: integer
+            description: Number of days to look back (default 30)
+
+    - name: azure_cost_trend
+      description: >
+        Get daily Azure cost data points for trend line chart visualization.
+      tool: ./tools/cost-trend.mjs
+      parameters:
+        type: object
+        properties:
+          days:
+            type: integer
+            description: Number of days to look back (default 30)
+
+  views:
+    - name: "Azure Cost"
+      type: panel
+      source: ./workspace/index.html
