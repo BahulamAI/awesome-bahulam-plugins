@@ -1,6 +1,11 @@
 import { createDocument, type DocumentPolicy, type Operation } from "@bahulam/workplane-ui";
 
 export const DOCUMENT_ID = "wp_azure_cost";
+/**
+ * Fallback only. Every query result carries the currency Azure reported, and
+ * that always wins — this subscription bills in INR while plugin settings say
+ * USD, and labelling INR as USD would be an ~85x error, not a cosmetic one.
+ */
 export const CURRENCY = "USD";
 
 /**

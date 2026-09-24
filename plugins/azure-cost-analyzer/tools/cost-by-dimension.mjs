@@ -1,82 +1,82 @@
-import { getAzureConfig, updateAzureWorkplane } from './lib.mjs';
-
-export const name = 'azure_cost_by_dimension';
-export const description = 'Get Azure costs aggregated by a chosen dimension (region, resource_group, tag, resource_type)';
-
 /**
- * Aggregate costs by a chosen dimension for slice-and-dice analysis.
+ * Cost aggregated by a chosen dimension, read from Cost Management.
  *
- * @param {object} args
- * @param {('region'|'resource_group'|'tag'|'resource_type')} [args.dimension='region']
- * @param {number} [args.days=30]
- * @param {object} options
- * @param {object} options.state — plugin state proxy
- * @returns {{ success: boolean, output: object }}
+ * @returns {{ success: boolean, output: object|string }}
  */
-export async function call(args = {}, { state }) {
+import { getAzureConfig, toolFailure, updateAzureWorkplane } from './lib.mjs';
+import { lastNDays, queryCost } from './azure.mjs';
+
+/** Our dimension names mapped to Cost Management's. */
+const DIMENSIONS = {
+  region: { name: 'ResourceLocation', label: 'region' },
+  resource_group: { name: 'ResourceGroupName', label: 'resource group' },
+  resource_type: { name: 'ResourceType', label: 'resource type' },
+  // Tags are not a Dimension in Cost Management; they are their own axis.
+  tag: { name: 'TagKey', label: 'tag', isTag: true },
+};
+
+export async function call(args = {}, { state, deps } = {}) {
   const config = getAzureConfig(state);
   if (!config.ready) return { success: false, output: config.error };
 
-  const days = Math.min(90, Math.max(1, Number(args.days) || 30));
-  const dimension = (args.dimension || 'region').trim();
+  const requested = String(args.dimension || 'region');
+  const dimension = DIMENSIONS[requested];
+  if (!dimension) {
+    return {
+      success: false,
+      output: `Unsupported dimension "${requested}". Choose one of: ${Object.keys(DIMENSIONS).join(', ')}.`,
+    };
+  }
+  const days = Math.min(365, Math.max(1, Number(args.days) || 30));
 
-  // Simulated dimension aggregates — these sum to ~$1,423.57
-  const ALL = {
-    region: [
-      { value: 'eastus', cost: 585.00, pct: 41.1 },
-      { value: 'westeurope', cost: 325.10, pct: 22.8 },
-      { value: 'southeastasia', cost: 117.57, pct: 8.3 },
-      { value: 'eastus2', cost: 105.00, pct: 7.4 },
-      { value: 'northeurope', cost: 290.90, pct: 20.4 },
-    ],
-    resource_group: [
-      { value: 'rg-production', cost: 865.00, pct: 60.8 },
-      { value: 'rg-staging', cost: 195.00, pct: 13.7 },
-      { value: 'rg-development', cost: 142.57, pct: 10.0 },
-      { value: 'rg-shared-services', cost: 221.00, pct: 15.5 },
-    ],
-    tag: [
-      { value: 'env:production', cost: 865.00, pct: 60.8 },
-      { value: 'env:staging', cost: 195.00, pct: 13.7 },
-      { value: 'env:development', cost: 142.57, pct: 10.0 },
-      { value: 'team:platform', cost: 652.00, pct: 45.8 },
-      { value: 'team:frontend', cost: 220.00, pct: 15.5 },
-      { value: 'team:backend', cost: 375.00, pct: 26.3 },
-    ],
-    resource_type: [
-      { value: 'App Service Plans', cost: 280.00, pct: 19.7 },
-      { value: 'Web Apps', cost: 220.00, pct: 15.5 },
-      { value: 'SQL Databases', cost: 325.00, pct: 22.8 },
-      { value: 'Storage Accounts', cost: 125.00, pct: 8.8 },
-      { value: 'Blob Containers', cost: 85.00, pct: 6.0 },
-      { value: 'AKS Clusters', cost: 180.00, pct: 12.6 },
-      { value: 'Virtual Machines', cost: 135.00, pct: 9.5 },
-      { value: 'Azure Functions', cost: 72.57, pct: 5.1 },
-    ],
-  };
+  try {
+    const result = await queryCost(config, {
+      timeframe: 'Custom',
+      timePeriod: lastNDays(days),
+      granularity: 'None',
+      grouping: [dimension.isTag
+        ? { type: 'TagKey', name: 'Tag' }
+        : { type: 'Dimension', name: dimension.name }],
+      deps,
+    });
 
-  const selected = ALL[dimension] || ALL.region;
-  const total = selected.reduce((s, item) => s + item.cost, 0);
+    const round = (n) => Math.round(n * 100) / 100;
+    const values = result.rows
+      .map((row) => {
+        return {
+          value: String(result.pick(row, [dimension.name, 'TagKey', 'Tag'], 'Unknown') || 'Unassigned'),
+          cost: round(Number(result.get(row, result.measure, 0)) || 0),
+        };
+      })
+      .filter((item) => item.cost !== 0)
+      .sort((a, b) => b.cost - a.cost);
 
-  // Side-effect: write ALL dimensions so the Slice & Dice tab can switch without re-querying
-  const dashboard = {
-    cost_by_dimension: ALL,
-    currency: config.currency,
-    period_days: days,
-    _updated: Date.now(),
-  };
-  updateAzureWorkplane(state, dashboard, [
-    { id: `cost-by-${dimension}`, type: 'bar_chart', title: `Cost by ${dimension.replace('_', ' ')} · ${days} days`, data: selected.map(item => ({ label: item.value, value: item.cost })), format: 'currency', currency: config.currency },
-  ]);
+    const total = round(values.reduce((sum, item) => sum + item.cost, 0));
+    const resolvedCurrency = result.currency || config.currency;
 
-  return {
-    success: true,
-    output: {
-      dimension,
-      values: selected,
-      total,
-      currency: config.currency,
-      period_days: days,
-    },
-  };
+    updateAzureWorkplane(
+      state,
+      { cost_by_dimension: { [requested]: values }, currency: resolvedCurrency, period_days: days, _updated: Date.now() },
+      [
+        { id: `cost-by-${requested}`, type: 'bar_chart',
+          title: `Cost by ${dimension.label} · ${days} days`,
+          data: values.slice(0, 20).map((item) => ({ label: item.value, value: item.cost })),
+          format: 'currency', currency: resolvedCurrency },
+      ],
+    );
+
+    return {
+      success: true,
+      output: {
+        dimension: requested,
+        values,
+        total,
+        currency: resolvedCurrency,
+        period_days: days,
+        measure: result.measure,
+      },
+    };
+  } catch (error) {
+    return toolFailure(error, `Could not read cost by ${dimension.label}`);
+  }
 }

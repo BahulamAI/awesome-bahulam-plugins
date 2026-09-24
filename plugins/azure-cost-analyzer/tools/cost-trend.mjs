@@ -1,61 +1,61 @@
-import { getAzureConfig, updateAzureWorkplane } from './lib.mjs';
-
-export const name = 'azure_cost_trend';
-export const description = 'Get daily Azure cost data points for trend line chart visualization';
-
 /**
- * Generate daily cost data points for trend visualization.
+ * Daily cost trend, read from Cost Management.
  *
- * @param {object} args
- * @param {number} [args.days=30] — number of days to look back (1-90)
- * @param {object} options
- * @param {object} options.state — plugin state proxy
- * @returns {{ success: boolean, output: object }}
+ * @returns {{ success: boolean, output: object|string }}
  */
-export async function call(args = {}, { state }) {
+import { getAzureConfig, toolFailure, updateAzureWorkplane } from './lib.mjs';
+import { lastNDays, normalizeDate, queryCost } from './azure.mjs';
+
+export async function call(args = {}, { state, deps } = {}) {
   const config = getAzureConfig(state);
   if (!config.ready) return { success: false, output: config.error };
 
-  const days = Math.min(90, Math.max(1, Number(args.days) || 30));
+  const days = Math.min(365, Math.max(1, Number(args.days) || 30));
 
-  // Generate daily costs with a sinusoidal weekly pattern + random noise
-  // ~$1,423.57 total over 30 days, mean ~$47.45/day
-  const now = new Date();
-  const dailyCosts = [];
-  for (let i = days - 1; i >= 0; i--) {
-    const d = new Date(now);
-    d.setDate(d.getDate() - i);
-    const dateStr = d.toISOString().slice(0, 10);
-    // Weekly cycle: weekend lower, mid-week higher
-    const dayOfWeek = d.getDay();
-    const weekFactor = (dayOfWeek === 0 || dayOfWeek === 6) ? 0.7 : 1.15;
-    // Some randomness ±20%
-    const noise = 0.8 + Math.random() * 0.4;
-    const cost = Math.round(47.45 * weekFactor * noise * 100) / 100;
-    dailyCosts.push({ date: dateStr, cost });
+  try {
+    const result = await queryCost(config, {
+      timeframe: 'Custom',
+      timePeriod: lastNDays(days),
+      granularity: 'Daily',
+      deps,
+    });
+
+    const byDate = new Map();
+    for (const row of result.rows) {
+      const date = normalizeDate(result.pick(row, ['UsageDate', 'BillingMonth', 'Date']));
+      if (!date) continue;
+      byDate.set(date, (byDate.get(date) ?? 0) + (Number(result.get(row, result.measure, 0)) || 0));
+    }
+
+    const round = (n) => Math.round(n * 100) / 100;
+    const dailyCosts = [...byDate.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, cost]) => ({ date, cost: round(cost) }));
+
+    const total = round(dailyCosts.reduce((sum, item) => sum + item.cost, 0));
+    const resolvedCurrency = result.currency || config.currency;
+
+    updateAzureWorkplane(
+      state,
+      { daily_costs: dailyCosts, total_trend_cost: total, currency: resolvedCurrency, period_days: days, _updated: Date.now() },
+      [
+        { id: 'cost-trend', type: 'line_chart', title: `Daily cost trend · ${days} days`,
+          data: dailyCosts.map((item) => ({ label: item.date, value: item.cost })),
+          format: 'currency', currency: resolvedCurrency },
+      ],
+    );
+
+    return {
+      success: true,
+      output: {
+        daily_costs: dailyCosts,
+        total,
+        currency: resolvedCurrency,
+        period_days: days,
+        measure: result.measure,
+      },
+    };
+  } catch (error) {
+    return toolFailure(error, 'Could not read the cost trend');
   }
-
-  const total = dailyCosts.reduce((s, d) => s + d.cost, 0);
-
-  // Side-effect: write to dashboard_data so the panel renders the trend chart
-  const dashboard = {
-    daily_costs: dailyCosts,
-    trend_period_days: days,
-    total_trend_cost: total,
-    currency: config.currency,
-    _updated: Date.now(),
-  };
-  updateAzureWorkplane(state, dashboard, [
-    { id: 'cost-trend', type: 'line_chart', title: `Daily cost trend · ${days} days`, data: dailyCosts.map(item => ({ label: item.date, value: item.cost })), format: 'currency', currency: config.currency },
-  ]);
-
-  return {
-    success: true,
-    output: {
-      daily_costs: dailyCosts,
-      total,
-      currency: config.currency,
-      period_days: days,
-    },
-  };
 }

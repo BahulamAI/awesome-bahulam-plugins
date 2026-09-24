@@ -1,50 +1,72 @@
-import { getAzureConfig, updateAzureWorkplane } from './lib.mjs';
-
-export const name = 'azure_cost_by_service';
-export const description = 'Get Azure cost breakdown by service for the current billing period';
-
 /**
- * Get cost breakdown by Azure service.
+ * Cost by Azure service, read from Cost Management.
  *
- * @param {object} args
- * @param {number} [args.days=30] — lookback period (1-90)
- * @param {object} options
- * @param {object} options.state — plugin state proxy
- * @returns {{ success: boolean, output: object }}
+ * @returns {{ success: boolean, output: object|string }}
  */
-export async function call(args = {}, { state }) {
+import { getAzureConfig, toolFailure, updateAzureWorkplane } from './lib.mjs';
+import { lastNDays, queryCost } from './azure.mjs';
+
+export async function call(args = {}, { state, deps } = {}) {
   const config = getAzureConfig(state);
   if (!config.ready) return { success: false, output: config.error };
 
-  const days = Math.min(90, Math.max(1, Number(args.days) || 30));
+  const days = Math.min(365, Math.max(1, Number(args.days) || 30));
 
-  // Side-effect: write to dashboard_data KV so the workspace panel renders it
-  const services = [
-    { name: 'Azure App Service', cost: 412.30 }, { name: 'Azure SQL Database', cost: 325.10 },
-    { name: 'Azure Kubernetes Service', cost: 286.75 }, { name: 'Azure Storage', cost: 189.42 },
-    { name: 'Azure Functions', cost: 110.00 }, { name: 'Azure Networking', cost: 100.00 },
-  ];
-  const dashboard = {
-    services,
-    total_by_service: 1423.57,
-    period_days: days,
-    currency: config.currency,
-    _updated: Date.now(),
-  };
-  updateAzureWorkplane(state, dashboard, [
-    { id: 'cost-by-service', type: 'bar_chart', title: `Cost by service · ${days} days`, data: services.map(item => ({ label: item.name, value: item.cost })), format: 'currency', currency: config.currency },
-    { id: 'cost-landscape', type: 'three_scene', title: 'Azure cost landscape', scene: { kind: 'bar_landscape', data: services.map(item => ({ label: item.name, value: item.cost })) }, format: 'currency', currency: config.currency },
-    { id: 'cost-by-service-table', type: 'table', title: 'Service detail', columns: ['Service', 'Cost'], rows: services.map(item => [item.name, item.cost]), format: { 1: 'currency' }, currency: config.currency },
-  ]);
+  try {
+    const result = await queryCost(config, {
+      timeframe: 'Custom',
+      timePeriod: lastNDays(days),
+      granularity: 'None',
+      grouping: [{ type: 'Dimension', name: 'ServiceName' }],
+      deps,
+    });
 
-  return {
-    success: true,
-    output: {
-      subscription_id: config.subscription_id,
-      period_days: days,
-      currency: config.currency,
-      services,
-      total: 1423.57,
-    },
-  };
+    const services = result.rows
+      .map((row) => {
+        return {
+          name: String(result.pick(row, ['ServiceName', 'ServiceTier'], 'Unknown')),
+          cost: Number(result.get(row, result.measure, 0)) || 0,
+        };
+      })
+      .filter((item) => item.cost !== 0)
+      .sort((a, b) => b.cost - a.cost);
+
+    const total = services.reduce((sum, item) => sum + item.cost, 0);
+    const resolvedCurrency = result.currency || config.currency;
+    const round = (n) => Math.round(n * 100) / 100;
+
+    updateAzureWorkplane(
+      state,
+      {
+        services,
+        total_by_service: round(total),
+        period_days: days,
+        currency: resolvedCurrency,
+        _updated: Date.now(),
+      },
+      [
+        { id: 'cost-by-service', type: 'bar_chart', title: `Cost by service · ${days} days`,
+          data: services.slice(0, 20).map((item) => ({ label: item.name, value: round(item.cost) })),
+          format: 'currency', currency: resolvedCurrency },
+        { id: 'cost-by-service-table', type: 'table', title: 'Service detail',
+          columns: ['Service', 'Cost'],
+          rows: services.map((item) => [item.name, round(item.cost)]),
+          format: { 1: 'currency' }, currency: resolvedCurrency },
+      ],
+    );
+
+    return {
+      success: true,
+      output: {
+        subscription_id: config.subscription_id,
+        period_days: days,
+        currency: resolvedCurrency,
+        services: services.map((item) => ({ name: item.name, cost: round(item.cost) })),
+        total: round(total),
+        measure: result.measure,
+      },
+    };
+  } catch (error) {
+    return toolFailure(error, 'Could not read cost by service');
+  }
 }

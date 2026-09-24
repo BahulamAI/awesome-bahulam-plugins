@@ -134,16 +134,13 @@ config:
             description: Number of days to look back (default 30)
 
   views:
-    # The original widget panel. Unchanged — it still reads `dashboard_data`
-    # and the `workplane` KV key written by the tools.
+    # The sole view. The previous hand-written HTML panel was removed in favour
+    # of this one, which is a Workplane document: scenes and addressable blocks
+    # that a user and an agent edit through one validated command gateway.
+    #
+    # Its document lives under the `workplane_document` state key. The tools
+    # still publish typed widgets to the legacy `workplane` key, which this view
+    # can import as a labelled snapshot.
     - name: "Azure Cost"
-      type: panel
-      source: ./workspace/index.html
-
-    # A Workplane view, additive alongside the panel above. It stores its
-    # document under the `workplane_document` key, so the two never contend for
-    # one value, and it reads data by invoking the same tools rather than
-    # duplicating their logic.
-    - name: "Azure Cost (Workplane)"
       type: panel
       source: ./workspace/workplane.html

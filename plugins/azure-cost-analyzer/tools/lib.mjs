@@ -47,13 +47,29 @@ export function getAzureConfig(state) {
 }
 
 /**
- * Keep the legacy dashboard payload during the migration, while publishing
- * typed workplane widgets for the generic renderer. Widgets contain data,
- * never arbitrary HTML or executable chart code.
+ * Publish typed workplane widgets alongside the legacy dashboard payload.
+ * Widgets carry data only — never HTML or executable chart code.
+ *
+ * Kept after the HTML panel was removed because the Workplane view can import
+ * these widgets as a snapshot, and because a tool run should leave a trace of
+ * what it read.
  */
 export function updateAzureWorkplane(state, legacy, widgets) {
-  state.patch('dashboard_data', legacy);
+  if (typeof state.patch === 'function') state.patch('dashboard_data', legacy);
   if (typeof state.upsertWorkplaneWidgets === 'function') {
     state.upsertWorkplaneWidgets(widgets, { title: 'Azure Cost Analyzer' });
   }
+}
+
+/**
+ * Turn any thrown error into the `{ success: false, output }` envelope the
+ * runtime expects.
+ *
+ * Deliberately never substitutes sample data. A tool that cannot read Azure
+ * must say so: a plausible-looking cost figure with no source behind it is the
+ * one outcome worse than an error message.
+ */
+export function toolFailure(error, context) {
+  const message = error?.message ? String(error.message) : String(error);
+  return { success: false, output: context ? `${context}: ${message}` : message };
 }
