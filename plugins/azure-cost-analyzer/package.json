@@ -3,9 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Build for the Azure Cost Analyzer Workplane view. Dev-only — the plugin ships the built bundle in workspace/, which the host serves statically.",
+  "description": "Build for the Azure Cost Analyzer Workplane view. Dev-only \u2014 the plugin ships the built bundle in workspace/, which the host serves statically.",
   "scripts": {
-    "build": "vite build",
+    "build": "vite build && node scripts/inline.mjs",
     "dev": "vite build --watch"
   },
   "devDependencies": {

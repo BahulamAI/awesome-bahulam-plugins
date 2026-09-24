@@ -82,7 +82,11 @@ function App() {
 
   useEffect(() => {
     let disposed = false;
-    const client = new BahulamClient({ plugin: PLUGIN });
+
+    // The host loads a panel as /plugin-view/<plugin>/<file>?token=... and
+    // authorises every subsequent request. `fromLocation` picks the token up
+    // from this page's own URL; without it every call comes back 401.
+    const client = BahulamClient.fromLocation(PLUGIN);
 
     const provider = new PluginToolDataProvider({
       client,
@@ -119,12 +123,16 @@ function App() {
 
         if (!disposed) setController(next);
       } catch (cause) {
-        if (!disposed) {
-          setError(
-            `Could not reach the Bahulam local service: ${(cause as Error).message}. ` +
-              `Open this view from the Bahulam workspace rather than as a file.`,
-          );
-        }
+        if (disposed) return;
+        const message = (cause as Error).message ?? String(cause);
+        const unauthorized = /401|unauthor/i.test(message);
+        setError(
+          unauthorized
+            ? "This panel was opened without a local workspace token, so the host refused " +
+              "its requests. Open it from the Bahulam workspace rather than as a file or a " +
+              "bookmarked URL."
+            : `Could not reach the Bahulam local service: ${message}`,
+        );
       }
     })();
 
