@@ -1,0 +1,6 @@
+# Dev-only build tooling for the Workplane view. The BUILT artifacts
+# (workspace/workplane.js, workspace/workplane.css) are committed, because the
+# host serves a plugin's directory statically with no build step — so a user
+# installing this plugin needs no toolchain.
+node_modules/
+package-lock.json

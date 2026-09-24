@@ -1,0 +1,17 @@
+.wp-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 10px 12px; margin-bottom: 14px; border: 1px solid #d8dce3; border-radius: 8px; background: #fff; }
+.wp-stats { display: flex; gap: 14px; font-size: 12px; color: #5b6270; flex-wrap: wrap; }
+.wp-stats strong { font-variant-numeric: tabular-nums; color: #16191d; }
+.wp-updating { color: #6b4a00; background: #fff6e0; padding: 1px 6px; border-radius: 4px; }
+.wp-actions { display: flex; gap: 8px; align-items: center; font-size: 13px; }
+.wp-actions button { font: inherit; padding: 6px 10px; border-radius: 6px; border: 1px solid #d8dce3; background: #fff; cursor: pointer; }
+.wp-actions a { color: #1f5fd6; text-decoration: none; }
+.wp-notice { background: #fff6e0; color: #6b4a00; padding: 9px 11px; border-radius: 6px; font-size: 13px; margin: 0 0 14px; }
+.wp-error { background: #fdeced; color: #8c1c24; padding: 14px; border-radius: 6px; font-size: 13px; margin: 24px; line-height: 1.5; }
+.wp-footer { margin-top: 24px; font-size: 11px; color: #5b6270; text-align: center; line-height: 1.6; }
+
+@media (prefers-color-scheme: dark) {
+  .wp-toolbar { background: #1c2027; border-color: #333a45; }
+  .wp-stats strong { color: #eef1f5; }
+  .wp-actions button { background: #14171c; border-color: #333a45; color: #eef1f5; }
+}
