@@ -11,9 +11,33 @@ metadata:
   repository: https://github.com/BahulamAI/awesome-bahulam-plugins
 
 config:
-  # Gives the agent a typed widget-update tool. The runtime renders widgets;
-  # agents cannot inject HTML or executable chart code into this panel.
-  workplane: true
+  # Workplane: the agent and the panel commit to ONE document through the host
+  # authority. Agents cannot inject HTML or executable chart code — they name a
+  # renderer from the host catalog and supply data.
+  workplane:
+    enabled: true
+
+    # MUST match the id the view opens (workplane-src/document.ts), or the agent
+    # and the panel would each edit their own document.
+    document:
+      id: wp_azure_cost
+      title: Azure cost investigation
+
+    # What an agent or a user may commit. Anything not listed here is refused by
+    # the authority, so the agent can change the analysis window but cannot
+    # reach any other value.
+    writablePaths:
+      - path: /filters/days
+        schema: { type: integer, minimum: 1, maximum: 365 }
+      - path: /filters/dimension
+        schema:
+          type: string
+          enum: [region, resource_group, tag, resource_type]
+      - path: /selection/services
+        schema:
+          type: array
+          maxItems: 50
+          items: { type: string, maxLength: 128 }
 
   # Declared config fields: the workspace panel renders a settings form
   # from this definition. Values are stored in the plugin's local SQLite
