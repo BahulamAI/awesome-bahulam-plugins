@@ -3,7 +3,7 @@
  *
  * @returns {{ success: boolean, output: object|string }}
  */
-import { getAzureConfig, toolFailure, updateAzureWorkplane } from './lib.mjs';
+import { getAzureConfig, toolFailure } from './lib.mjs';
 import { lastNDays, normalizeDate, queryCost } from './azure.mjs';
 
 export async function call(args = {}, { state, deps } = {}) {
@@ -34,16 +34,6 @@ export async function call(args = {}, { state, deps } = {}) {
 
     const total = round(dailyCosts.reduce((sum, item) => sum + item.cost, 0));
     const resolvedCurrency = result.currency || config.currency;
-
-    updateAzureWorkplane(
-      state,
-      { daily_costs: dailyCosts, total_trend_cost: total, currency: resolvedCurrency, period_days: days, _updated: Date.now() },
-      [
-        { id: 'cost-trend', type: 'line_chart', title: `Daily cost trend · ${days} days`,
-          data: dailyCosts.map((item) => ({ label: item.date, value: item.cost })),
-          format: 'currency', currency: resolvedCurrency },
-      ],
-    );
 
     return {
       success: true,

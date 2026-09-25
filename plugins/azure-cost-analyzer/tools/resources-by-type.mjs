@@ -3,7 +3,7 @@
  *
  * @returns {{ success: boolean, output: object|string }}
  */
-import { getAzureConfig, toolFailure, updateAzureWorkplane } from './lib.mjs';
+import { getAzureConfig, toolFailure } from './lib.mjs';
 import { lastNDays, queryCost } from './azure.mjs';
 
 /** A resource id's type segment, e.g. Microsoft.Web/sites. */
@@ -65,16 +65,6 @@ export async function call(args = {}, { state, deps } = {}) {
 
     const total = round(resources.reduce((sum, item) => sum + item.cost, 0));
     const resolvedCurrency = result.currency || config.currency;
-
-    updateAzureWorkplane(
-      state,
-      { resources, types, total_resource_cost: total, currency: resolvedCurrency, period_days: days, _updated: Date.now() },
-      [
-        { id: 'cost-by-resource-type', type: 'bar_chart', title: `Cost by resource type · ${days} days`,
-          data: types.slice(0, 20).map((item) => ({ label: item.type, value: item.cost })),
-          format: 'currency', currency: resolvedCurrency },
-      ],
-    );
 
     return {
       success: true,

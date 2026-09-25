@@ -27,10 +27,12 @@ function ok(label, cond, detail) {
 
 function makeState(config) {
   return {
-    widgets: [],
-    dashboard: null,
-    patch(_key, value) { this.dashboard = value; },
-    upsertWorkplaneWidgets(widgets) { this.widgets.push(...widgets); },
+    // A tool must not write state at all now: it returns data, and the
+    // Workplane authority is the only thing that writes.
+    writes: [],
+    patch(key) { this.writes.push(key); },
+    set(key) { this.writes.push(key); },
+    upsertWorkplaneWidgets() { this.writes.push('workplane'); },
     getConfig(key) { return config[key] ?? null; },
     getAllConfig() { return config; },
   };
@@ -130,7 +132,6 @@ console.log('\ncost-by-service against a realistic payload');
   ok('drops zero-cost rows', result.output?.services?.length === 2);
   ok('sums the total', result.output?.total === 737.4);
   ok('reports the currency Azure returned', result.output?.currency === 'USD');
-  ok('publishes a bar chart widget', state.widgets.some((w) => w.id === 'cost-by-service' && w.type === 'bar_chart'));
 
   const query = fetchImpl.calls.find((c) => c.url.includes('CostManagement/query'));
   ok('requests ActualCost with a custom window', query?.body?.type === 'ActualCost' && query?.body?.timeframe === 'Custom');
@@ -207,7 +208,22 @@ console.log('\nbudget-alerts');
   ok('computes consumed percent', result.output?.budgets?.[0]?.consumed_percent === 90);
   ok('flags only the breached budget', result.output?.breached?.length === 1 && result.output.breached[0] === 'monthly');
   ok('does not divide by zero', result.output.budgets[2].consumed_percent === null);
-  ok('raises a danger alert widget', state.widgets.some((w) => w.id === 'budget-usage' && w.tone === 'danger'));
+}
+
+console.log('\ntools write nothing; they only return data');
+{
+  clearTokenCache();
+  const fetchImpl = fakeFetch([['Microsoft.CostManagement/query', costResponse(
+    [{ name: 'Cost' }, { name: 'ServiceName' }, { name: 'Currency' }],
+    [[412.3, 'Azure App Service', 'USD']],
+  )]]);
+  const state = makeState(FULL);
+  const result = await costByService({ days: 30 }, { state, deps: { fetch: fetchImpl } });
+  ok('succeeds', result.success === true);
+  // One contract writes to the database: the Workplane command gateway. A tool
+  // publishing widgets on the side was a second write path with its own
+  // vocabulary, and nothing reads it.
+  ok('the tool wrote no state', state.writes.length === 0, JSON.stringify(state.writes));
 }
 
 console.log('\nfailures surface, never become zeroes');

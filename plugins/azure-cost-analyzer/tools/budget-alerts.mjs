@@ -3,7 +3,7 @@
  *
  * @returns {{ success: boolean, output: object|string }}
  */
-import { getAzureConfig, toolFailure, updateAzureWorkplane } from './lib.mjs';
+import { getAzureConfig, toolFailure } from './lib.mjs';
 import { listBudgets } from './azure.mjs';
 
 export async function call(args = {}, { state, deps } = {}) {
@@ -33,21 +33,6 @@ export async function call(args = {}, { state, deps } = {}) {
 
     const breached = evaluated.filter((budget) => budget.breached);
     const currency = evaluated[0]?.currency || config.currency;
-
-    updateAzureWorkplane(
-      state,
-      { budgets: evaluated, threshold_percent: threshold, currency, _updated: Date.now() },
-      breached.length
-        ? [{ id: 'budget-usage', type: 'alert', tone: 'danger',
-             title: 'Budget alert',
-             message: `${breached.length} budget${breached.length === 1 ? '' : 's'} at or above ` +
-               `${threshold}%: ${breached.map((b) => `${b.name} (${b.consumed_percent}%)`).join(', ')}` }]
-        : [{ id: 'budget-usage', type: 'alert', tone: 'success',
-             title: 'Budget alert',
-             message: evaluated.length
-               ? `All ${evaluated.length} budget${evaluated.length === 1 ? '' : 's'} below ${threshold}%.`
-               : 'No budgets are defined on this subscription.' }],
-    );
 
     return {
       success: true,

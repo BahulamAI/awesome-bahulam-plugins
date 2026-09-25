@@ -47,21 +47,6 @@ export function getAzureConfig(state) {
 }
 
 /**
- * Publish typed workplane widgets alongside the legacy dashboard payload.
- * Widgets carry data only — never HTML or executable chart code.
- *
- * Kept after the HTML panel was removed because the Workplane view can import
- * these widgets as a snapshot, and because a tool run should leave a trace of
- * what it read.
- */
-export function updateAzureWorkplane(state, legacy, widgets) {
-  if (typeof state.patch === 'function') state.patch('dashboard_data', legacy);
-  if (typeof state.upsertWorkplaneWidgets === 'function') {
-    state.upsertWorkplaneWidgets(widgets, { title: 'Azure Cost Analyzer' });
-  }
-}
-
-/**
  * Turn any thrown error into the `{ success: false, output }` envelope the
  * runtime expects.
  *

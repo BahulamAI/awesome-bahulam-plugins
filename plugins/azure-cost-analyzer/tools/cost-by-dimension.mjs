@@ -3,7 +3,7 @@
  *
  * @returns {{ success: boolean, output: object|string }}
  */
-import { getAzureConfig, toolFailure, updateAzureWorkplane } from './lib.mjs';
+import { getAzureConfig, toolFailure } from './lib.mjs';
 import { lastNDays, queryCost } from './azure.mjs';
 
 /** Our dimension names mapped to Cost Management's. */
@@ -53,17 +53,6 @@ export async function call(args = {}, { state, deps } = {}) {
 
     const total = round(values.reduce((sum, item) => sum + item.cost, 0));
     const resolvedCurrency = result.currency || config.currency;
-
-    updateAzureWorkplane(
-      state,
-      { cost_by_dimension: { [requested]: values }, currency: resolvedCurrency, period_days: days, _updated: Date.now() },
-      [
-        { id: `cost-by-${requested}`, type: 'bar_chart',
-          title: `Cost by ${dimension.label} · ${days} days`,
-          data: values.slice(0, 20).map((item) => ({ label: item.value, value: item.cost })),
-          format: 'currency', currency: resolvedCurrency },
-      ],
-    );
 
     return {
       success: true,

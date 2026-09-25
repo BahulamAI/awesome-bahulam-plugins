@@ -1,4 +1,4 @@
-import { StrictMode, useCallback, useEffect, useMemo, useState } from "react";
+import { StrictMode, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { WorkplaneController, type Actor } from "@bahulam/workplane-ui";
 import {
@@ -12,9 +12,7 @@ import { echartsRenderer } from "@bahulam/workplane-ui/echarts";
 import {
   BahulamClient,
   HttpCommandGateway,
-  importLegacyWorkplane,
   PluginToolDataProvider,
-  type LegacyWorkplane,
 } from "@bahulam/workplane-ui/bahulam";
 import "@bahulam/workplane-ui/styles.css";
 import "./view.css";
@@ -36,17 +34,7 @@ const ACTOR: Actor = {
   capabilities: [],
 };
 
-function Toolbar({
-  queries,
-  onImportLegacy,
-  legacyAvailable,
-  notice,
-}: {
-  queries: number;
-  onImportLegacy: () => void;
-  legacyAvailable: boolean;
-  notice: string | null;
-}) {
+function Toolbar({ queries, notice }: { queries: number; notice: string | null }) {
   const { document, epoch } = useControllerState();
   return (
     <>
@@ -57,14 +45,7 @@ function Toolbar({
           <span>tool reads <strong>{queries}</strong></span>
           {epoch.stale ? <span className="wp-updating">updating…</span> : null}
         </div>
-        <div className="wp-actions">
-          {legacyAvailable ? (
-            <button type="button" onClick={onImportLegacy}>
-              Import legacy widgets
-            </button>
-          ) : null}
-          <a href="./index.html">Legacy panel →</a>
-        </div>
+
       </div>
       {notice ? <p className="wp-notice" role="status">{notice}</p> : null}
     </>
@@ -75,7 +56,6 @@ function App() {
   const [controller, setController] = useState<WorkplaneController | null>(null);
   const [queries, setQueries] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
-  const [legacy, setLegacy] = useState<LegacyWorkplane | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const renderers = useMemo(() => createNativeRegistry().register(echartsRenderer), []);
@@ -128,10 +108,6 @@ function App() {
           if (!result.ok) setNotice(`${result.error.code}: ${result.error.message}`);
         }
 
-        // Offer the legacy import only if there is something to import.
-        const existing = await client.getKey<LegacyWorkplane>("workplane");
-        if (!disposed && existing?.widgets?.length) setLegacy(existing);
-
         if (!disposed) setController(next);
       } catch (cause) {
         if (disposed) return;
@@ -153,27 +129,6 @@ function App() {
     };
   }, []);
 
-  const importLegacy = useCallback(async () => {
-    if (!controller || !legacy) return;
-    const operations = importLegacyWorkplane(legacy, {
-      sceneId: "imported",
-      sceneTitle: "Imported from the legacy panel",
-    });
-    if (operations.length === 0) return;
-    const result = await controller.commit(operations);
-    if (result.ok) {
-      setLegacy(null);
-      setNotice(
-        "Imported as a snapshot. Legacy widgets carry literal values, not queries, so these blocks do not refresh.",
-      );
-    } else {
-      setNotice(
-        /already exists/.test(result.error.message)
-          ? "Those widgets were already imported."
-          : `${result.error.code}: ${result.error.message}`,
-      );
-    }
-  }, [controller, legacy]);
 
   if (error) {
     return <p className="wp-error" role="alert">{error}</p>;
@@ -185,12 +140,7 @@ function App() {
   return (
     <WorkplaneProvider controller={controller} renderers={renderers}>
       <div className="shell">
-        <Toolbar
-          queries={queries}
-          onImportLegacy={() => void importLegacy()}
-          legacyAvailable={legacy !== null}
-          notice={notice}
-        />
+        <Toolbar queries={queries} notice={notice} />
         <Presenter controller={controller} registry={presenters} />
         <footer className="wp-footer">
           Figures come from this plugin's own tools, which read credentials inside the host — no
