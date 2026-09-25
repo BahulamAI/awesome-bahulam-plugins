@@ -17,6 +17,21 @@ config:
   workplane:
     enabled: true
 
+    # What `workplane-src/main.tsx` registers, and therefore all the agent is
+    # offered. workplane.diagram is deliberately absent: Mermaid would have to be
+    # inlined into a single-file panel, which costs several megabytes for a cost
+    # dashboard that has no diagrams in it.
+    renderers:
+      - workplane.markdown
+      - workplane.code
+      - workplane.text
+      - workplane.fact
+      - workplane.metric
+      - workplane.table
+      - workplane.form
+      - workplane.button
+      - workplane.echarts
+
     # MUST match the id the view opens (workplane-src/document.ts), or the agent
     # and the panel would each edit their own document.
     document:
@@ -162,9 +177,8 @@ config:
     # of this one, which is a Workplane document: scenes and addressable blocks
     # that a user and an agent edit through one validated command gateway.
     #
-    # Its document lives under the `workplane_document` state key. The tools
-    # still publish typed widgets to the legacy `workplane` key, which this view
-    # can import as a labelled snapshot.
+    # The document lives in the workplane tables, reached through the same
+    # command gateway the agent commits to. There is no second write path.
     - name: "Azure Cost"
       type: panel
       source: ./workspace/workplane.html
