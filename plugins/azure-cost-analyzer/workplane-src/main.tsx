@@ -60,6 +60,12 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [live, setLive] = useState<string | null>(null);
 
+  // Native set: text, markdown, code, fact, metric, table, form, button.
+  // Charts need the echarts peer. Diagrams are deliberately NOT registered
+  // here: a plugin panel must be one self-contained file (the host authorises
+  // every request, so a separate chunk 404s), which turns mermaid's lazy import
+  // into an inlined 5 MB. A cost tool has no diagrams to draw, so it does not
+  // pay for them.
   const renderers = useMemo(() => createNativeRegistry().register(echartsRenderer), []);
   const presenters = useMemo(() => createPresenterRegistry(), []);
 
