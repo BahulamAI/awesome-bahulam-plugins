@@ -1,6 +1,6 @@
 import { StrictMode, useCallback, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { LocalAuthority, WorkplaneController, type Actor } from "@bahulam/workplane-ui";
+import { WorkplaneController, type Actor } from "@bahulam/workplane-ui";
 import {
   createNativeRegistry,
   createPresenterRegistry,
@@ -11,8 +11,8 @@ import {
 import { echartsRenderer } from "@bahulam/workplane-ui/echarts";
 import {
   BahulamClient,
+  HttpCommandGateway,
   importLegacyWorkplane,
-  PluginStateStorage,
   PluginToolDataProvider,
   type LegacyWorkplane,
 } from "@bahulam/workplane-ui/bahulam";
@@ -24,15 +24,16 @@ import { QUERY_BINDINGS } from "./queries.js";
 const PLUGIN = "azure-cost-analyzer";
 
 /**
- * The acting user. Capabilities come from the host session in a real
- * deployment; this view is the local single-user case, and the authority still
- * checks them on every command rather than trusting the UI.
+ * Placeholder actor. The HOST derives the real one from the authenticated
+ * session and ignores anything sent from here, which is why a panel cannot
+ * grant itself capabilities. Kept only because the controller's type requires
+ * one.
  */
 const ACTOR: Actor = {
-  id: "local_user",
+  id: "panel",
   type: "user",
   label: "You",
-  capabilities: ["workplane.edit"],
+  capabilities: [],
 };
 
 function Toolbar({
@@ -94,13 +95,14 @@ function App() {
       onExecute: () => setQueries((n) => n + 1),
     });
 
-    // Storage lives under `workplane_document`, NOT the legacy `workplane` key,
-    // so the existing panel is untouched by anything this view does.
-    const storage = new PluginStateStorage({ client, seed: createAzureDocument() });
-    const authority = new LocalAuthority({ storage, policy: POLICY });
+    // The HOST is the authority. This panel is a client of it, not a second
+    // writer — which is what stops the panel and the agent producing
+    // conflicting revisions of one document.
+    const gateway = new HttpCommandGateway(client);
+    gateway.watch(DOCUMENT_ID);
 
     const next = new WorkplaneController({
-      gateway: authority,
+      gateway,
       documentId: DOCUMENT_ID,
       actor: ACTOR,
       provider,
@@ -112,7 +114,16 @@ function App() {
         await next.load();
         if (disposed) return;
 
-        if ((next.document?.sceneOrder.length ?? 0) === 0) {
+        if (!next.document) {
+          setError(
+            "The host has no Workplane document for this plugin. Check that plugin.yaml " +
+              "declares config.workplane and that the CLI is running a build that serves " +
+              "/api/workplane.",
+          );
+          return;
+        }
+
+        if (next.document.sceneOrder.length === 0) {
           const result = await next.commit(OVERVIEW);
           if (!result.ok) setNotice(`${result.error.code}: ${result.error.message}`);
         }
