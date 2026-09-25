@@ -34,7 +34,7 @@ const ACTOR: Actor = {
   capabilities: [],
 };
 
-function Toolbar({ queries, notice }: { queries: number; notice: string | null }) {
+function Toolbar({ queries, notice, live }: { queries: number; notice: string | null; live: string | null }) {
   const { document, epoch } = useControllerState();
   return (
     <>
@@ -44,6 +44,7 @@ function Toolbar({ queries, notice }: { queries: number; notice: string | null }
           <span>epoch <strong>{epoch.epoch}</strong></span>
           <span>tool reads <strong>{queries}</strong></span>
           {epoch.stale ? <span className="wp-updating">updating…</span> : null}
+          {live ? <span className="wp-live" role="status">{live}</span> : null}
         </div>
 
       </div>
@@ -57,6 +58,7 @@ function App() {
   const [queries, setQueries] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [live, setLive] = useState<string | null>(null);
 
   const renderers = useMemo(() => createNativeRegistry().register(echartsRenderer), []);
   const presenters = useMemo(() => createPresenterRegistry(), []);
@@ -109,6 +111,17 @@ function App() {
         }
 
         if (!disposed) setController(next);
+        // A change committed elsewhere — by an agent, or another client —
+        // arrives on the host bus and applies without a reload. Announce it,
+        // because a document that silently rearranges itself is worse than one
+        // that tells you why.
+        next.subscribe(() => {
+          const actor = next.document?.revision;
+          if (actor === undefined) return;
+          setLive(`updated to revision ${actor}`);
+          window.setTimeout(() => setLive(null), 4000);
+        });
+
       } catch (cause) {
         if (disposed) return;
         const message = (cause as Error).message ?? String(cause);
@@ -140,7 +153,7 @@ function App() {
   return (
     <WorkplaneProvider controller={controller} renderers={renderers}>
       <div className="shell">
-        <Toolbar queries={queries} notice={notice} />
+        <Toolbar queries={queries} notice={notice} live={live} />
         <Presenter controller={controller} registry={presenters} />
         <footer className="wp-footer">
           Figures come from this plugin's own tools, which read credentials inside the host — no

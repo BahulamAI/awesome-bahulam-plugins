@@ -3,6 +3,8 @@
 .wp-stats { display: flex; gap: 14px; font-size: 12px; color: #5b6270; flex-wrap: wrap; }
 .wp-stats strong { font-variant-numeric: tabular-nums; color: #16191d; }
 .wp-updating { color: #6b4a00; background: #fff6e0; padding: 1px 6px; border-radius: 4px; }
+.wp-live { color: #0b5c2e; background: #e4f6ea; padding: 1px 6px; border-radius: 4px; }
+@media (prefers-color-scheme: dark) { .wp-live { color: #9fe3bb; background: #12331f; } }
 .wp-actions { display: flex; gap: 8px; align-items: center; font-size: 13px; }
 .wp-actions button { font: inherit; padding: 6px 10px; border-radius: 6px; border: 1px solid #d8dce3; background: #fff; cursor: pointer; }
 .wp-actions a { color: #1f5fd6; text-decoration: none; }
