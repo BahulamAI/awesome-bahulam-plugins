@@ -96,6 +96,15 @@ config:
         options: ["USD", "EUR", "GBP", "INR", "JPY", "AUD"]
         description: "Currency for cost display"
 
+  # A portable, plugin-owned procedure. The CLI loader reads this from the
+  # installed package; it is not an implicit project-level AGENTS.md.
+  skills:
+    - id: azure-cost-investigation
+      source: ./skills/azure-cost-investigation
+      description: Investigate Azure spend safely and turn findings into an actionable cost review.
+      applies_to: [azure-cost-analyzer]
+      availability: [cli, cli-remote, ide, chat, video, mobile]
+
   tools:
     - name: azure_list_subscriptions
       description: >
