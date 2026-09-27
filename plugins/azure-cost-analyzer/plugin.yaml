@@ -29,6 +29,10 @@ config:
       - workplane.metric
       - workplane.table
       - workplane.form
+      # Registered by the panel, but not offered to the agent while this
+      # manifest declares no `actions:` — a button can only name a registered
+      # action id, so with none there is nothing it could point at. Declaring an
+      # action makes it available again with no change here.
       - workplane.button
       - workplane.echarts
 
