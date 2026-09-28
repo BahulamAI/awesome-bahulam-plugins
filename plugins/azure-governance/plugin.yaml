@@ -1,0 +1,251 @@
+apiVersion: bahulam.plugin/1
+kind: Plugin
+metadata:
+  name: azure-governance
+  version: 0.1.0
+  description: >
+    Azure estate analysis runtime for cost, inventory, RBAC access, security
+    exposure, tagging, waste, and governance reporting across tenants,
+    subscriptions, resource groups, and resources.
+  author: BahulamAI
+  repository: https://github.com/BahulamAI/awesome-bahulam-plugins
+
+config:
+  requirements:
+    env:
+      - AZURE_TENANT_ID optional when Azure CLI login is active
+      - AZURE_SUBSCRIPTION_ID optional default subscription scope
+    network:
+      - host: management.azure.com
+        reason: Azure Resource Manager, Resource Graph, RBAC, Policy, and Advisor APIs.
+      - host: login.microsoftonline.com
+        reason: Microsoft Entra authentication for Azure SDK or Azure CLI flows.
+      - host: graph.microsoft.com
+        reason: Optional Microsoft Entra principal, sign-in, application credential, and federated identity enrichment.
+    optional_runtime:
+      - "Azure CLI: az"
+      - "Node package: @azure/identity"
+      - "Node package: @azure/arm-resourcegraph"
+      - "Node package: @azure/arm-costmanagement"
+      - "Node package: @azure/arm-authorization"
+      - "Node package: @azure/arm-policyinsights"
+
+  state:
+    tables:
+      - name: azure_scans
+        columns:
+          - { name: id, type: INTEGER, primary: true, autoincrement: true }
+          - { name: name, type: TEXT, not_null: true }
+          - { name: tenant_id, type: TEXT, not_null: true, default: "''" }
+          - { name: subscription_count, type: INTEGER, not_null: true, default: 0 }
+          - { name: resource_group_count, type: INTEGER, not_null: true, default: 0 }
+          - { name: resource_count, type: INTEGER, not_null: true, default: 0 }
+          - { name: role_assignment_count, type: INTEGER, not_null: true, default: 0 }
+          - { name: total_cost, type: REAL, not_null: true, default: 0 }
+          - { name: payload_json, type: TEXT, not_null: true }
+          - { name: created_at, type: TEXT, not_null: true }
+        indexes:
+          - { columns: [created_at] }
+
+      - name: azure_findings
+        columns:
+          - { name: id, type: INTEGER, primary: true, autoincrement: true }
+          - { name: scan_id, type: INTEGER, not_null: true, references: "azure_scans(id)" }
+          - { name: category, type: TEXT, not_null: true }
+          - { name: severity, type: TEXT, not_null: true }
+          - { name: title, type: TEXT, not_null: true }
+          - { name: target, type: TEXT, not_null: true, default: "''" }
+          - { name: evidence_json, type: TEXT, not_null: true, default: "'{}'" }
+          - { name: created_at, type: TEXT, not_null: true }
+        indexes:
+          - { columns: [scan_id] }
+          - { columns: [category] }
+          - { columns: [severity] }
+
+    context_always:
+      - azure_governance_state
+      - { stream: azure_activity, limit: 8 }
+
+    context_tools:
+      - name: list_azure_scans
+        table: azure_scans
+        description: List Azure estate scans captured by this plugin.
+        parameters:
+          type: object
+          properties:
+            limit: { type: integer }
+
+      - name: list_azure_findings
+        table: azure_findings
+        description: List governance findings for a scan.
+        parameters:
+          type: object
+          properties:
+            scan_id: { type: integer }
+            category: { type: string }
+            limit: { type: integer }
+
+  tools:
+    - name: azure_inventory_scan
+      description: "Capture or collect Azure inventory, detailed cost, optimization, RBAC/PIM, identity, Policy, Defender, metrics, diagnostics, and lock evidence."
+      tool: ./tools/azure-inventory-scan.mjs
+      parameters:
+        type: object
+        properties:
+          name: { type: string }
+          collect_from: { type: string, enum: [snapshot, azure_cli, azure_sdk, resource_graph] }
+          tenant_id: { type: string }
+          subscription_id: { type: string }
+          subscription_ids: { type: array, items: { type: string } }
+          management_group_ids: { type: array, items: { type: string } }
+          management_groups: { type: array, items: { type: string } }
+          page_size: { type: integer }
+          use_resource_graph: { type: boolean }
+          graph_page_size: { type: integer }
+          include_costs: { type: boolean }
+          include_cost_details: { type: boolean }
+          cost_details_max_wait_seconds: { type: integer }
+          include_benefit_recommendations: { type: boolean }
+          include_monitor_metrics: { type: boolean }
+          metric_resource_limit: { type: integer }
+          metric_lookback_days: { type: integer }
+          metrics_start_date: { type: string }
+          metrics_end_date: { type: string }
+          include_principals: { type: boolean }
+          include_group_memberships: { type: boolean }
+          group_membership_limit: { type: integer }
+          include_pim: { type: boolean }
+          include_identity_details: { type: boolean }
+          include_service_principal_sign_ins: { type: boolean }
+          identity_detail_limit: { type: integer }
+          include_governance_details: { type: boolean }
+          governance_detail_limit: { type: integer }
+          diagnostic_resource_types: { type: array, items: { type: string } }
+          cost_resource_group: { type: string }
+          cost_start_date: { type: string }
+          cost_end_date: { type: string }
+          cost_retry_count: { type: integer }
+          cost_retry_max_seconds: { type: integer }
+          cost_granularity: { type: string, enum: [Daily, None] }
+          cost_dimensions:
+            type: array
+            maxItems: 2
+            items: { type: string, enum: [resource_group, resource, service, region, meter, meter_category, meter_subcategory, sku, resource_type, pricing_model] }
+          subscriptions: { type: array, items: { type: object } }
+          resource_groups: { type: array, items: { type: object } }
+          resources: { type: array, items: { type: object } }
+          role_assignments: { type: array, items: { type: object } }
+          role_definitions: { type: array, items: { type: object } }
+          principals: { type: array, items: { type: object } }
+          group_memberships: { type: array, items: { type: object } }
+          costs: { type: array, items: { type: object } }
+          benefit_recommendations: { type: array, items: { type: object } }
+          monitor_metrics: { type: array, items: { type: object } }
+          pim_assignments: { type: array, items: { type: object } }
+          service_principal_credentials: { type: array, items: { type: object } }
+          federated_identity_credentials: { type: array, items: { type: object } }
+          sign_in_activity: { type: array, items: { type: object } }
+          policy_assignments: { type: array, items: { type: object } }
+          policy_states: { type: array, items: { type: object } }
+          security_assessments: { type: array, items: { type: object } }
+          secure_scores: { type: array, items: { type: object } }
+          regulatory_compliance: { type: array, items: { type: object } }
+          advisor_recommendations: { type: array, items: { type: object } }
+          diagnostic_settings: { type: array, items: { type: object } }
+          subscription_diagnostic_settings: { type: array, items: { type: object } }
+          resource_locks: { type: array, items: { type: object } }
+        required: [name]
+
+    - name: azure_resource_group_report
+      description: List resource groups from one stored scan with subscription, location, tags, resource count, and resource types.
+      tool: ./tools/azure-resource-group-report.mjs
+      parameters:
+        type: object
+        properties:
+          scan_id: { type: integer }
+          subscription_id: { type: string }
+          name: { type: string }
+          include_empty: { type: boolean }
+          format: { type: string, enum: [json, markdown] }
+
+    - name: azure_cost_report
+      description: Analyze dollar cost, forecasts, anomalies, idle spend, right-sizing, and commitment candidates.
+      tool: ./tools/azure-cost-report.mjs
+      parameters:
+        type: object
+        properties:
+          scan_id: { type: integer }
+          group_by: { type: string, enum: [subscription, resource_group, service, region, meter, sku, tag, resource] }
+          resource_group: { type: string }
+          tag_key: { type: string }
+          min_idle_cost_usd: { type: number }
+          idle_cpu_threshold_percent: { type: number }
+          min_rightsizing_cost_usd: { type: number }
+          rightsizing_cpu_threshold_percent: { type: number }
+          min_commitment_days: { type: integer }
+          min_commitment_cost_usd: { type: number }
+          max_commitment_daily_variation: { type: number }
+
+    - name: azure_access_matrix
+      description: Review direct and group-derived RBAC by principal or scope with identity risks and CSV or Markdown exports.
+      tool: ./tools/azure-access-matrix.mjs
+      parameters:
+        type: object
+        properties:
+          scan_id: { type: integer }
+          principal: { type: string }
+          scope: { type: string }
+          scope_level: { type: string, enum: [tenant, management_group, subscription, resource_group, resource] }
+          include_group_access: { type: boolean }
+          stale_days: { type: integer }
+          pim_expiry_days: { type: integer }
+          credential_expiry_days: { type: integer }
+          as_of: { type: string }
+          format: { type: string, enum: [json, csv, markdown, all] }
+
+    - name: azure_security_findings
+      description: Identify exposure, missing controls, policy compliance, and Defender posture with subscription and resource-group scores.
+      tool: ./tools/azure-security-findings.mjs
+      parameters:
+        type: object
+        properties:
+          scan_id: { type: integer }
+          evaluate_missing_controls: { type: boolean }
+          production_tag_values: { type: array, items: { type: string } }
+          diagnostic_resource_types: { type: array, items: { type: string } }
+          minimum_secure_score_percent: { type: number }
+
+    - name: azure_tag_audit
+      description: Audit required tag coverage for resources and resource groups.
+      tool: ./tools/azure-tag-audit.mjs
+      parameters:
+        type: object
+        properties:
+          scan_id: { type: integer }
+          required_tags:
+            type: array
+            items: { type: string }
+
+    - name: azure_waste_report
+      description: Find likely waste such as unattached disks, unattached public IPs, stopped allocated VMs, old snapshots, and unowned spend.
+      tool: ./tools/azure-waste-report.mjs
+      parameters:
+        type: object
+        properties:
+          scan_id: { type: integer }
+
+    - name: azure_governance_report
+      description: Produce an executive governance report combining inventory, cost, access, security, tags, and waste.
+      tool: ./tools/azure-governance-report.mjs
+      parameters:
+        type: object
+        properties:
+          scan_id: { type: integer }
+
+  workspace: ./config/workspace.yaml
+  agents_from: ./config/agents/
+
+  views:
+    - type: panel
+      name: Azure Governance
+      source: ./workspace/index.html
