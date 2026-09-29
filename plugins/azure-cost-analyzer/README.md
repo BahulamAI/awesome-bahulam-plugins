@@ -1,98 +1,103 @@
 # Azure Cost Analyzer
 
-Azure Cost Management analysis plugin for Bahulam. Provides cost breakdowns,
-budget alerts, and spending reports for Azure subscriptions.
+Azure Cost Management analysis for Bahulam: cost breakdowns by service, resource
+type and arbitrary dimension, daily trend, and budget-threshold checks.
 
-## Views
+The tools call Azure Cost Management for real — OAuth2 client credentials, the
+Query API, `Retry-After` on 429, and `nextLink` pagination. There is no sample
+data anywhere: a tool that cannot read Azure says so and returns no figure,
+because a plausible number with nothing behind it is worse than an error.
 
-This plugin ships two panels. They are additive: the Workplane view does not
-replace or modify the original.
+## How a result becomes something you can check
 
-| View | What it is |
-|---|---|
-| **Azure Cost** | The original panel. Renders `dashboard_data` and the typed widgets the tools write to the `workplane` key. |
-| **Azure Cost (Workplane)** | A [Workplane](https://github.com/BahulamAI/workplane-ui) document: scenes and addressable blocks a user and an agent edit through one validated command gateway. |
+Each tool records what it read into this plugin's own SQLite state before
+returning, in two declared tables:
 
-### How the Workplane view differs
+| Table | One row per | Carries |
+|---|---|---|
+| `cost_runs` | tool execution | capture time, tool, scope (subscription + window), currency, currency exponent |
+| `cost_rows` | figure in that run | position, dimension, label, amount in **integer minor units** |
 
-Both read the same data through the same tools. The difference is what happens
-to a change:
+`cost_runs` is the point of the split. A figure with no capture time, no scope
+and no currency is a number a reader cannot verify, so the provenance is stored
+once per run and the rows reference it.
 
-- Every durable change is a **validated transaction** against a document
-  revision. Two edits to the same value produce a conflict the user resolves,
-  rather than one silently overwriting the other.
-- The write surface is **declared and typed**. `/filters/days` accepts an
-  integer 1–365 and nothing else; a path that is not registered is refused by
-  the authority, not merely hidden in the UI.
-- A filter change **re-reads only the affected queries**, in one coherent group,
-  with no model call.
-- Selecting a service **highlights** the chart and filters the table, keyed on a
-  stable service id rather than the display label.
-- Money is handled in **integer minor units**, converted once at the tool
-  boundary. Charts never round independently.
-- A failing tool shows **its own error** — "credentials not configured" — rather
-  than a zero or a spinner.
+Money is converted to integer minor units once, at the tool boundary, with the
+currency's exponent stored beside it — JPY has no minor unit, KWD has three.
+Nothing downstream rounds a second time, so two readers cannot disagree about
+the cent.
 
-It stores its document under the `workplane_document` state key. The legacy
-`workplane` key is never written by this view, so the two panels cannot contend
-over one value. **Import legacy widgets** copies the current widget list in as a
-one-way snapshot; those blocks carry literal values rather than queries, so they
-do not refresh, and they say so.
+Recording is deliberately best-effort. A plugin whose database is unavailable
+still answers the question: losing a snapshot costs the panel a card, while
+failing the tool costs the user their answer.
 
-### Building the view
+## The panel
 
-Only needed if you change `workplane-src/`. The built artifacts
-(`workspace/workplane.js`, `workspace/workplane.css`) are committed, because the
-host serves a plugin directory statically with no build step — installing this
-plugin requires no toolchain.
+One view, **Azure Cost** (`workspace/state.html`): a deterministic reader of the
+tables above.
 
-```bash
-cd plugins/azure-cost-analyzer
-npm install
-npm run build        # or: npm run dev   (rebuild on change)
-```
+It interprets nothing. Tables are discovered from the database rather than
+hardcoded, rows appear in the order stored, and the only transformation is
+turning minor units back into an amount using the stored exponent. No charts, no
+derived totals, no agent-authored layout. A viewer that computes things is a
+viewer that can quietly disagree with the database it exists to show.
 
-`package.json` currently resolves `@bahulam/workplane-ui` from a sibling
-checkout via a `file:` path, so a fresh clone cannot rebuild the view until that
-package is on npm. Change the dependency to a published version range once it
-is — the committed bundle is unaffected either way.
+It is a single self-contained file with no build step and no external asset —
+the host serves a plugin directory statically, and a relative `<script src>`
+would inherit no session token and fail. It re-reads on the host's
+`plugin_state_changed` event, and has a Refresh button for when that stream is
+unavailable.
 
-## Data caveat
-
-The tools in `tools/` return **fixed sample values**. They validate credentials
-and fail cleanly without them, but they do not call Azure Cost Management yet.
-Any figure either panel shows is sample data, not your spend.
+Composition, agent-authored visuals and versioned documents are a separate
+concern; see PRD-108 §28.5 for why they are not here.
 
 ## Configuration
 
-This plugin requires Azure service principal credentials. Open the plugin
-panel in your workspace and fill in:
+Azure service principal credentials, entered in the plugin's settings form:
 
 | Field | Description |
-|-------|-------------|
-| Azure Subscription ID | UUID of the subscription to analyze |
+|---|---|
+| Azure Subscription ID | UUID of the subscription to analyse |
 | Azure Tenant ID | Azure AD tenant ID |
-| Service Principal Client ID | App registration with Cost Management Reader role |
-| Service Principal Secret | Client secret (stored locally, never sent to LLM) |
-| Currency | Display currency (USD, EUR, GBP, etc.) |
+| Service Principal Client ID | App registration with the Cost Management Reader role |
+| Service Principal Secret | Client secret |
+| Currency | Fallback only — the figure's currency comes from Azure's own response |
 
-Credentials are stored in the plugin's local SQLite state under `~/.bahulam/data/azure-cost-analyzer/state.db`.
-The LLM reads them indirectly through tool handlers — raw credential values
-never appear in the model context.
+Stored in the plugin's local SQLite state at
+`~/.bahulam/data/azure-cost-analyzer/state.db`. Tool handlers read them
+in-process through `state.getConfig(key)`; raw values never enter the model
+context, and `GET /api/plugin-config/<plugin>` returns `"***set***"` for them.
+
+The `Currency` field is a fallback and nothing more. A subscription billing in
+INR while this said USD is a real condition that made two tools report different
+currencies for the same data, so currency now comes from Azure's own column and a
+mismatch is reported rather than resolved silently.
 
 ## Tools
 
-- **azure_list_subscriptions** — List subscriptions with month-to-date cost
-- **azure_cost_by_service** — Cost breakdown by Azure service
-- **azure_budget_alerts** — Check budgets and alert on threshold breaches
-- **azure_resources_by_type** — Cost breakdown by resource type with per-resource details (region, resource group, tags)
-- **azure_cost_by_dimension** — Aggregate costs by region, resource group, tag, or resource type (slice-and-dice)
-- **azure_cost_trend** — Daily cost trend data for line chart visualization
+| Tool | Returns |
+|---|---|
+| `azure_list_subscriptions` | Accessible subscriptions with month-to-date cost |
+| `azure_cost_by_service` | Cost by Azure service |
+| `azure_cost_by_dimension` | Cost by region, resource group, tag, or resource type |
+| `azure_resources_by_type` | Per-resource cost with region, resource group and type |
+| `azure_cost_trend` | Daily cost over a window |
+| `azure_budget_alerts` | Budgets, consumption, and threshold breaches |
 
-## Security
+## Skill
 
-- Credentials are stored locally in SQLite, never sent to backend
-- Tool handlers read values via `state.getConfig(key)` in-process
-- The LLM sees only tool outputs (already-processed cost data)
-- Panel settings form masks credential fields in the browser
-- `GET /api/plugin-config/<plugin>` returns `"***set***"` for credential values
+`skills/azure-cost-investigation` carries the investigation order, how to present
+findings, and the guardrails. It names no tool shape or table schema: those are
+published by the tools and the manifest, and duplicating them in prose is how
+documentation starts lying.
+
+## Tests
+
+```bash
+node selftest.mjs      # 68 checks, no network, injected fetch
+```
+
+Covers the Azure client (auth, pagination, retry, column lookup by name), what
+each tool records, that money round-trips exactly through integer minor units in
+currencies with zero, two and three minor digits, and that every failure mode
+surfaces rather than becoming a zero.

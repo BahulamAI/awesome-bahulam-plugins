@@ -11,52 +11,34 @@ metadata:
   repository: https://github.com/BahulamAI/awesome-bahulam-plugins
 
 config:
-  # Workplane: the agent and the panel commit to ONE document through the host
-  # authority. Agents cannot inject HTML or executable chart code — they name a
-  # renderer from the host catalog and supply data.
-  workplane:
-    enabled: true
-
-    # What `workplane-src/main.tsx` registers, and therefore all the agent is
-    # offered. workplane.diagram is deliberately absent: Mermaid would have to be
-    # inlined into a single-file panel, which costs several megabytes for a cost
-    # dashboard that has no diagrams in it.
-    renderers:
-      - workplane.markdown
-      - workplane.code
-      - workplane.text
-      - workplane.fact
-      - workplane.metric
-      - workplane.table
-      - workplane.form
-      # Registered by the panel, but not offered to the agent while this
-      # manifest declares no `actions:` — a button can only name a registered
-      # action id, so with none there is nothing it could point at. Declaring an
-      # action makes it available again with no change here.
-      - workplane.button
-      - workplane.echarts
-
-    # MUST match the id the view opens (workplane-src/document.ts), or the agent
-    # and the panel would each edit their own document.
-    document:
-      id: wp_azure_cost
-      title: Azure cost investigation
-
-    # What an agent or a user may commit. Anything not listed here is refused by
-    # the authority, so the agent can change the analysis window but cannot
-    # reach any other value.
-    writablePaths:
-      - path: /filters/days
-        schema: { type: integer, minimum: 1, maximum: 365 }
-      - path: /filters/dimension
-        schema:
-          type: string
-          enum: [region, resource_group, tag, resource_type]
-      - path: /selection/services
-        schema:
-          type: array
-          maxItems: 50
-          items: { type: string, maxLength: 128 }
+  # Where tool results land. Declared here so the host creates them, the tools
+  # write them, and the panel reads them — one schema, three consumers.
+  #
+  # Split into a run and its rows because provenance is the point: a figure with
+  # no capture time, scope or currency is a number a reader cannot check.
+  state:
+    tables:
+      - name: cost_runs
+        columns:
+          - { name: id, type: integer, primary: true, autoincrement: true }
+          - { name: captured_at, type: text, not_null: true }
+          - { name: tool, type: text, not_null: true }
+          # Which subscription and window this covers.
+          - { name: scope, type: text }
+          - { name: currency, type: text }
+          # Minor units are meaningless without it: JPY has no cents, KWD has three.
+          - { name: currency_exponent, type: integer }
+          - { name: note, type: text }
+      - name: cost_rows
+        columns:
+          - { name: id, type: integer, primary: true, autoincrement: true }
+          - { name: run_id, type: integer, not_null: true, references: cost_runs(id) }
+          # Preserves the order the tool reported, which is usually significance.
+          - { name: position, type: integer }
+          - { name: dimension, type: text }
+          - { name: label, type: text }
+          # INTEGER minor units. Never a decimal — nothing downstream rounds twice.
+          - { name: amount_minor, type: integer }
 
   # Declared config fields: the workspace panel renders a settings form
   # from this definition. Values are stored in the plugin's local SQLite
@@ -186,12 +168,12 @@ config:
             description: Number of days to look back (default 30)
 
   views:
-    # The sole view. The previous hand-written HTML panel was removed in favour
-    # of this one, which is a Workplane document: scenes and addressable blocks
-    # that a user and an agent edit through one validated command gateway.
+    # The sole view: a deterministic reader of this plugin's own SQLite state.
     #
-    # The document lives in the workplane tables, reached through the same
-    # command gateway the agent commits to. There is no second write path.
+    # It interprets nothing. Every figure on screen is a row the tools wrote,
+    # shown with the capture time, scope and currency it was written with, so a
+    # reader can check it. Charts, composition and agent-authored layout are a
+    # separate concern and deliberately absent — see PRD-108 section 28.5.
     - name: "Azure Cost"
       type: panel
-      source: ./workspace/workplane.html
+      source: ./workspace/state.html

@@ -4,6 +4,7 @@
  * @returns {{ success: boolean, output: object|string }}
  */
 import { getAzureConfig, toolFailure } from './lib.mjs';
+import { recordSnapshot } from './snapshot.mjs';
 import { lastNDays, normalizeDate, queryCost } from './azure.mjs';
 
 export async function call(args = {}, { state, deps } = {}) {
@@ -34,6 +35,16 @@ export async function call(args = {}, { state, deps } = {}) {
 
     const total = round(dailyCosts.reduce((sum, item) => sum + item.cost, 0));
     const resolvedCurrency = result.currency || config.currency;
+
+    // Record what was read so the panel can show it with its provenance.
+    // Best-effort by design: a lost snapshot costs a card, a failed tool
+    // costs the answer.
+    recordSnapshot(state, {
+      tool: 'azure_cost_trend',
+      scope: `${config.subscription_id} · last ${days}d daily`,
+      currency: resolvedCurrency,
+      rows: dailyCosts.map((item) => ({ dimension: 'date', label: item.date, amount: item.cost })),
+    });
 
     return {
       success: true,

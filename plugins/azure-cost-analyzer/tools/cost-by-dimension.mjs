@@ -4,6 +4,7 @@
  * @returns {{ success: boolean, output: object|string }}
  */
 import { getAzureConfig, toolFailure } from './lib.mjs';
+import { recordSnapshot } from './snapshot.mjs';
 import { lastNDays, queryCost } from './azure.mjs';
 
 /** Our dimension names mapped to Cost Management's. */
@@ -53,6 +54,16 @@ export async function call(args = {}, { state, deps } = {}) {
 
     const total = round(values.reduce((sum, item) => sum + item.cost, 0));
     const resolvedCurrency = result.currency || config.currency;
+
+    // Record what was read so the panel can show it with its provenance.
+    // Best-effort by design: a lost snapshot costs a card, a failed tool
+    // costs the answer.
+    recordSnapshot(state, {
+      tool: 'azure_cost_by_dimension',
+      scope: `${config.subscription_id} · last ${days}d by ${requested}`,
+      currency: resolvedCurrency,
+      rows: values.map((item) => ({ dimension: requested, label: item.value, amount: item.cost })),
+    });
 
     return {
       success: true,

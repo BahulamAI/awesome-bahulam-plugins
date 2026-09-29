@@ -27,14 +27,21 @@ function ok(label, cond, detail) {
 
 function makeState(config) {
   return {
-    // A tool must not write state at all now: it returns data, and the
-    // Workplane authority is the only thing that writes.
+    // Captured SQL, so a test can assert exactly what a tool recorded rather
+    // than only that it recorded something.
+    sql: [],
     writes: [],
     patch(key) { this.writes.push(key); },
     set(key) { this.writes.push(key); },
-    upsertWorkplaneWidgets() { this.writes.push('workplane'); },
+    query(sql, params = []) {
+      this.sql.push({ sql: String(sql).replace(/\s+/g, ' ').trim(), params });
+      // The one read the snapshot helper performs.
+      if (/last_insert_rowid/.test(sql)) return [{ id: this.sql.filter(e => /INSERT INTO cost_runs/.test(e.sql)).length }];
+      return [];
+    },
     getConfig(key) { return config[key] ?? null; },
     getAllConfig() { return config; },
+    rowsFor(table) { return this.sql.filter(entry => entry.sql.startsWith(`INSERT INTO ${table}`)); },
   };
 }
 
@@ -220,10 +227,48 @@ console.log('\ntools write nothing; they only return data');
   const state = makeState(FULL);
   const result = await costByService({ days: 30 }, { state, deps: { fetch: fetchImpl } });
   ok('succeeds', result.success === true);
-  // One contract writes to the database: the Workplane command gateway. A tool
-  // publishing widgets on the side was a second write path with its own
-  // vocabulary, and nothing reads it.
-  ok('the tool wrote no state', state.writes.length === 0, JSON.stringify(state.writes));
+
+  // A tool records what it read so the panel can show it with provenance. It
+  // uses ONLY the declared tables — no kv key, no second vocabulary.
+  ok('no untyped kv write', state.writes.length === 0, JSON.stringify(state.writes));
+  const runs = state.rowsFor('cost_runs');
+  ok('recorded exactly one run', runs.length === 1, JSON.stringify(runs));
+  ok('the run carries provenance',
+    runs[0]?.params?.[1] === 'azure_cost_by_service'
+    && String(runs[0]?.params?.[2] ?? '').includes('last 30d')
+    && runs[0]?.params?.[3] === 'USD',
+    JSON.stringify(runs[0]?.params));
+
+  const rows = state.rowsFor('cost_rows');
+  ok('recorded a row per service', rows.length === 1, JSON.stringify(rows.length));
+  // 412.3 USD is 41230 minor units. A decimal reaching the column would mean
+  // two readers could round it differently.
+  const amount = rows[0]?.params?.[4];
+  ok('money stored as integer minor units', amount === 41230, String(amount));
+  ok('currency exponent recorded beside it', runs[0]?.params?.[4] === 2, String(runs[0]?.params?.[4]));
+}
+
+console.log('\nminor units survive the round trip');
+{
+  const { toMinorUnits, currencyExponent } = await import('./tools/snapshot.mjs');
+  // Two-digit currencies are the common case.
+  ok('USD 412.30 -> 41230', toMinorUnits(412.3, 'USD') === 41230, String(toMinorUnits(412.3, 'USD')));
+  ok('INR 51734.48 -> 5173448', toMinorUnits(51734.48, 'INR') === 5173448, String(toMinorUnits(51734.48, 'INR')));
+  // The ones a hardcoded "times 100" gets wrong. A yen is already the minor
+  // unit; a dinar has three digits. Storing 100x or 0.1x the real amount would
+  // display a confidently wrong figure rather than failing.
+  ok('JPY has no minor unit', currencyExponent('JPY') === 0 && toMinorUnits(1500, 'JPY') === 1500,
+    String(toMinorUnits(1500, 'JPY')));
+  ok('KWD has three digits', currencyExponent('KWD') === 3 && toMinorUnits(12.345, 'KWD') === 12345,
+    String(toMinorUnits(12.345, 'KWD')));
+  ok('an unknown currency assumes two', currencyExponent('ZZZ') === 2);
+  ok('case does not matter', currencyExponent('jpy') === 0);
+  // Rounding happens once, here, so nothing downstream rounds a second time.
+  ok('rounds once at the boundary', toMinorUnits(0.005, 'USD') === 1, String(toMinorUnits(0.005, 'USD')));
+  for (const [currency, amount] of [['USD', 412.3], ['INR', 51734.48], ['JPY', 1500], ['KWD', 12.345]]) {
+    const back = toMinorUnits(amount, currency) / 10 ** currencyExponent(currency);
+    ok(`${currency} ${amount} renders back exactly`, back === amount, String(back));
+  }
 }
 
 console.log('\nfailures surface, never become zeroes');

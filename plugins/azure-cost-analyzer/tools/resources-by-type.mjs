@@ -4,6 +4,7 @@
  * @returns {{ success: boolean, output: object|string }}
  */
 import { getAzureConfig, toolFailure } from './lib.mjs';
+import { recordSnapshot } from './snapshot.mjs';
 import { lastNDays, queryCost } from './azure.mjs';
 
 /** A resource id's type segment, e.g. Microsoft.Web/sites. */
@@ -65,6 +66,16 @@ export async function call(args = {}, { state, deps } = {}) {
 
     const total = round(resources.reduce((sum, item) => sum + item.cost, 0));
     const resolvedCurrency = result.currency || config.currency;
+
+    // Record what was read so the panel can show it with its provenance.
+    // Best-effort by design: a lost snapshot costs a card, a failed tool
+    // costs the answer.
+    recordSnapshot(state, {
+      tool: 'azure_resources_by_type',
+      scope: `${config.subscription_id} · last ${days}d by resource`,
+      currency: resolvedCurrency,
+      rows: resources.slice(0, 200).map((item) => ({ dimension: 'resource', label: `${item.name} (${item.type})`, amount: item.cost })),
+    });
 
     return {
       success: true,
