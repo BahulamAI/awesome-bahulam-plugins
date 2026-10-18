@@ -17,16 +17,32 @@
       "subdir": "plugins/browser-use",
       "description": "Browser form-filling runtime with session state, reusable form profiles, guarded fill plans, approval-gated submit actions, and local/hosted adapter contracts",
       "author": "BahulamAI",
-      "tags": ["browser", "forms", "automation", "playwright", "mcp", "state", "approvals"]
+      "tags": [
+        "browser",
+        "forms",
+        "automation",
+        "playwright",
+        "mcp",
+        "state",
+        "approvals"
+      ]
     },
     {
       "name": "campaign-studio",
       "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
       "ref": "main",
       "subdir": "plugins/campaign-studio",
-      "description": "Campaign outcome runtime — plan, create, approve, cross-post, and track content/ad campaigns with multi-agent workflow, durable state, simulated publishing, and analytics reporting",
+      "description": "Campaign outcome runtime \u2014 plan, create, approve, cross-post, and track content/ad campaigns with multi-agent workflow, durable state, simulated publishing, and analytics reporting",
       "author": "BahulamAI",
-      "tags": ["marketing", "campaigns", "ads", "content", "analytics", "state", "orchestration"]
+      "tags": [
+        "marketing",
+        "campaigns",
+        "ads",
+        "content",
+        "analytics",
+        "state",
+        "orchestration"
+      ]
     },
     {
       "name": "document-writer",
@@ -35,25 +51,46 @@
       "subdir": "plugins/document-writer",
       "description": "Compositional document writer for research papers, patent applications (with USPTO XML output), technical reports, grant proposals, and literature reviews. Documents live as a JSON DSL; document.md and refs.bib are always kept in sync. Domain specialists (Source / Outline / Draft / Cite / Vision Analyst / Figure / Claim / Style / Reviewer, plus patent-only Prior Art and Claim Author) each own a slice of the DSL. Every claim traces to a source; compile refuses to emit final targets while unverified claims exist. Compile to md / tex / pdf / docx / uspto_xml. Watermark support (DRAFT / CONFIDENTIAL / auto-DRAFT when unverified claims exist) renders across every target. Zero-credential local providers for PDF text extract and reference lookup; upgrade paths for Mistral OCR and Crossref.",
       "author": "BahulamAI",
-      "tags": ["document", "writing", "paper", "patent", "grant", "report", "citation", "bibtex", "latex", "pandoc", "dsl", "vision", "watermark"]
+      "tags": [
+        "document",
+        "writing",
+        "paper",
+        "patent",
+        "grant",
+        "report",
+        "citation",
+        "bibtex",
+        "latex",
+        "pandoc",
+        "dsl",
+        "vision",
+        "watermark"
+      ]
     },
     {
       "name": "hello-mcp",
       "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
       "ref": "main",
       "subdir": "plugins/hello-mcp",
-      "description": "Reference for Plugin = MCP + UX — a bundled MCP server, a JS state tool, a sub-agent that composes both, and a live workspace view",
+      "description": "Reference for Plugin = MCP + UX \u2014 a bundled MCP server, a JS state tool, a sub-agent that composes both, and a live workspace view",
       "author": "BahulamAI",
-      "tags": ["reference", "mcp", "starter"]
+      "tags": [
+        "reference",
+        "mcp",
+        "starter"
+      ]
     },
     {
       "name": "hello-world",
       "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
       "ref": "main",
       "subdir": "plugins/hello-world",
-      "description": "Minimal reference plugin — one tool, one sub-agent, one workspace panel",
+      "description": "Minimal reference plugin \u2014 one tool, one sub-agent, one workspace panel",
       "author": "BahulamAI",
-      "tags": ["reference", "starter"]
+      "tags": [
+        "reference",
+        "starter"
+      ]
     },
     {
       "name": "manim-studio",
@@ -62,7 +99,14 @@
       "subdir": "plugins/manim-studio",
       "description": "Standalone Manim animation studio for text-to-video explainers with render state, background jobs, review, and a live gallery",
       "author": "BahulamAI",
-      "tags": ["animation", "video", "manim", "async", "education", "explainer"]
+      "tags": [
+        "animation",
+        "video",
+        "manim",
+        "async",
+        "education",
+        "explainer"
+      ]
     },
     {
       "name": "raspberry-pi",
@@ -78,9 +122,35 @@
       "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
       "ref": "main",
       "subdir": "plugins/threejs-studio",
-      "description": "Standalone Three.js interactive 3D studio — text-to-scene for product demos, data visualizations, architectural walkthroughs, physics simulations, generative art, and educational animations. Instant HTML output, no render pipeline.",
+      "description": "Standalone Three.js interactive 3D studio \u2014 text-to-scene for product demos, data visualizations, architectural walkthroughs, physics simulations, generative art, and educational animations. Instant HTML output, no render pipeline.",
       "author": "BahulamAI",
-      "tags": ["threejs", "3d", "visualization", "animation", "interactive", "webgl", "education", "product"]
+      "tags": [
+        "threejs",
+        "3d",
+        "visualization",
+        "animation",
+        "interactive",
+        "webgl",
+        "education",
+        "product"
+      ]
+    },
+    {
+      "name": "azure-devops",
+      "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
+      "ref": "development",
+      "subdir": "plugins/azure-devops",
+      "description": "Azure DevOps coworker tools for customer organizations: work items, project/team discovery, sprint snapshots, pipelines and PRs, executed by Bahulam with scoped connections and Microsoft Teams connectivity.",
+      "author": "BahulamAI",
+      "tags": [
+        "azure",
+        "devops",
+        "ado",
+        "teams",
+        "work-items",
+        "connections",
+        "state"
+      ]
     }
   ]
 }
