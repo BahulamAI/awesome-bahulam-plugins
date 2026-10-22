@@ -1,0 +1,449 @@
+apiVersion: bahulam.plugin/1
+kind: Plugin
+metadata:
+  name: app-research
+  version: 0.1.0
+  description: Day 1 app-idea research with verified evidence, resumable collection, and custom review panels.
+  author: Sree
+  repository: https://github.com/BahulamAI/awesome-bahulam-plugins
+config:
+  requirements:
+    env: []
+    network:
+      - host: api.search.brave.com
+        reason: Discover public sources for demand research.
+        optional: true
+  config:
+    fields:
+      - name: brave_api_key
+        type: password
+        credential: true
+        required: false
+        description: Brave Search API key. Source imports work without it.
+  state:
+    tables:
+      - name: research_apps
+        columns:
+          - name: id
+            type: TEXT
+            primary: true
+          - name: app_id
+            type: TEXT
+            not_null: true
+          - name: run_id
+            type: TEXT
+            not_null: true
+          - name: data
+            type: TEXT
+            not_null: true
+        indexes:
+          - columns:
+              - app_id
+              - run_id
+      - name: research_runs
+        columns:
+          - name: id
+            type: TEXT
+            primary: true
+          - name: app_id
+            type: TEXT
+            not_null: true
+          - name: run_id
+            type: TEXT
+            not_null: true
+          - name: data
+            type: TEXT
+            not_null: true
+        indexes:
+          - columns:
+              - app_id
+              - run_id
+      - name: research_sources
+        columns:
+          - name: id
+            type: TEXT
+            primary: true
+          - name: app_id
+            type: TEXT
+            not_null: true
+          - name: run_id
+            type: TEXT
+            not_null: true
+          - name: data
+            type: TEXT
+            not_null: true
+        indexes:
+          - columns:
+              - app_id
+              - run_id
+      - name: research_evidence
+        columns:
+          - name: id
+            type: TEXT
+            primary: true
+          - name: app_id
+            type: TEXT
+            not_null: true
+          - name: run_id
+            type: TEXT
+            not_null: true
+          - name: data
+            type: TEXT
+            not_null: true
+        indexes:
+          - columns:
+              - app_id
+              - run_id
+      - name: research_reviews
+        columns:
+          - name: id
+            type: TEXT
+            primary: true
+          - name: app_id
+            type: TEXT
+            not_null: true
+          - name: run_id
+            type: TEXT
+            not_null: true
+          - name: data
+            type: TEXT
+            not_null: true
+        indexes:
+          - columns:
+              - app_id
+              - run_id
+      - name: research_artifacts
+        columns:
+          - name: id
+            type: TEXT
+            primary: true
+          - name: app_id
+            type: TEXT
+            not_null: true
+          - name: run_id
+            type: TEXT
+            not_null: true
+          - name: data
+            type: TEXT
+            not_null: true
+        indexes:
+          - columns:
+              - app_id
+              - run_id
+  workspace: ./config/workspace.yaml
+  agents_from: ./config/agents/
+  tools:
+    - name: research_dashboard
+      description: List app ideas, runs, source metadata, evidence, reviews and readiness.
+      tool: ./tools/research_dashboard.mjs
+      parameters:
+        type: object
+        properties:
+          app_id:
+            type: string
+          run_id:
+            type: string
+        additionalProperties: false
+    - name: research_app_save
+      description: Create or update an app brief. Existing run snapshots stay unchanged.
+      tool: ./tools/research_app_save.mjs
+      parameters:
+        type: object
+        properties:
+          app_id:
+            type: string
+          config:
+            type: object
+        additionalProperties: false
+    - name: research_run_create
+      description: Freeze a complete query plan and explicit connector budgets for an app.
+      tool: ./tools/research_run_create.mjs
+      parameters:
+        type: object
+        properties:
+          app_id:
+            type: string
+          budgets:
+            type: object
+          queries:
+            type: array
+            items:
+              type: object
+        additionalProperties: false
+    - name: research_run_limits_update
+      description: Update search-call, document, and collection-time caps on a queued or paused run without changing its query plan or evidence.
+      tool: ./tools/research_run_limits_update.mjs
+      parameters:
+        type: object
+        properties:
+          run_id:
+            type: string
+          queries:
+            type: integer
+            minimum: 1
+            maximum: 100
+          documents:
+            type: integer
+            minimum: 1
+            maximum: 500
+          minutes:
+            type: integer
+            minimum: 1
+            maximum: 240
+        required: [run_id, queries, documents, minutes]
+        additionalProperties: false
+    - name: research_collect
+      description: Advance one checkpointed search or fetch step; limits are enforced by code.
+      tool: ./tools/research_collect.mjs
+      parameters:
+        type: object
+        properties:
+          run_id:
+            type: string
+        additionalProperties: false
+    - name: research_run_control
+      description: Pause, resume, cancel or retry a run after operator direction.
+      tool: ./tools/research_run_control.mjs
+      parameters:
+        type: object
+        properties:
+          run_id:
+            type: string
+          action:
+            type: string
+        additionalProperties: false
+    - name: research_run_delete
+      description: Permanently delete a run and its source, evidence, review, and export records. Requires exact run ID confirmation and refuses active collection.
+      tool: ./tools/research_run_delete.mjs
+      parameters:
+        type: object
+        properties:
+          run_id:
+            type: string
+          confirm_run_id:
+            type: string
+        required: [run_id, confirm_run_id]
+        additionalProperties: false
+    - name: research_source_get
+      description: Read one stored source snapshot and its status. Analyze only if content is non-empty; failed, deleted, or metadata-only snapshots have no analyzable text.
+      tool: ./tools/research_source_get.mjs
+      parameters:
+        type: object
+        properties:
+          run_id:
+            type: string
+          source_id:
+            type: string
+        additionalProperties: false
+    - name: research_source_import
+      description: Import source context with provenance, or annotate an existing snapshot.
+      tool: ./tools/research_source_import.mjs
+      parameters:
+        type: object
+        properties:
+          run_id:
+            type: string
+          url:
+            type: string
+          content:
+            type: string
+          title:
+            type: string
+          family:
+            type: string
+          context_id:
+            type: string
+          published_at:
+            type: string
+          provenance_note:
+            type: string
+        additionalProperties: false
+    - name: research_evidence_record
+      description: Record an exact source-matched evidence candidate, pending human review.
+      tool: ./tools/research_evidence_record.mjs
+      parameters:
+        type: object
+        properties:
+          run_id:
+            type: string
+          source_id:
+            type: string
+          quote:
+            type: string
+          audience:
+            type: string
+          hypothesis_ids:
+            type: array
+            items:
+              type: string
+          relevance:
+            type: string
+            enum: [direct, adjacent, irrelevant]
+            description: "Use direct, adjacent, or irrelevant. This is not a strength score."
+          direction:
+            type: string
+            enum: [supports, contradicts, mixed/unclear]
+          unprompted:
+            type: string
+            enum: [yes, no, unknown]
+          rationale:
+            type: string
+          consequence:
+            type: string
+          workaround:
+            type: string
+          spending_signal:
+            type: string
+        additionalProperties: false
+    - name: research_analysis_done
+      description: Mark a source analyzed only after research_source_get returned non-empty content and that text was evaluated. Do not call for failed, deleted, or metadata-only sources.
+      tool: ./tools/research_analysis_done.mjs
+      parameters:
+        type: object
+        properties:
+          run_id:
+            type: string
+          source_id:
+            type: string
+          note:
+            type: string
+        additionalProperties: false
+    - name: research_evidence_review
+      description: Operator review of evidence; acceptance of imported text requires a source check.
+      tool: ./tools/research_evidence_review.mjs
+      parameters:
+        type: object
+        properties:
+          run_id:
+            type: string
+          evidence_id:
+            type: string
+          decision:
+            type: string
+          reason:
+            type: string
+          reviewer:
+            type: string
+          source_checked:
+            type: boolean
+          corrections:
+            type: object
+        additionalProperties: false
+    - name: research_source_remove
+      description: Remove source text, invalidate evidence and purge generated export contents.
+      tool: ./tools/research_source_remove.mjs
+      parameters:
+        type: object
+        properties:
+          run_id:
+            type: string
+          source_id:
+            type: string
+          reason:
+            type: string
+        additionalProperties: false
+    - name: research_outcome_record
+      description: Record the operator Day 1 outcome, enforcing interview readiness.
+      tool: ./tools/research_outcome_record.mjs
+      parameters:
+        type: object
+        properties:
+          run_id:
+            type: string
+          outcome:
+            type: string
+          reason:
+            type: string
+        additionalProperties: false
+    - name: research_export
+      description: Generate a versioned consolidated app-level research pack when app_id is provided, or a run-level pack when run_id is provided.
+      tool: ./tools/research_export.mjs
+      parameters:
+        type: object
+        properties:
+          app_id:
+            type: string
+          run_id:
+            type: string
+        additionalProperties: false
+    - name: research_artifact_get
+      description: Retrieve a current run-level or consolidated app-level export bundle for download.
+      tool: ./tools/research_artifact_get.mjs
+      parameters:
+        type: object
+        properties:
+          app_id:
+            type: string
+          run_id:
+            type: string
+          artifact_id:
+            type: string
+        additionalProperties: false
+    - name: research_sources_import
+      description: Import JSON or CSV source excerpts atomically; provenance is required.
+      tool: ./tools/research_sources_import.mjs
+      parameters:
+        type: object
+        properties:
+          run_id:
+            type: string
+          format:
+            type: string
+          data:
+            type: string
+        additionalProperties: false
+    - name: research_source_annotate
+      description: Annotate source family, date and thread identity without altering source text.
+      tool: ./tools/research_source_annotate.mjs
+      parameters:
+        type: object
+        properties:
+          run_id:
+            type: string
+          source_id:
+            type: string
+          family:
+            type: string
+          context_id:
+            type: string
+          published_at:
+            type: string
+          provenance_note:
+            type: string
+        additionalProperties: false
+  views:
+    - type: panel
+      name: Start here
+      source: ./workspace/start.html
+      permissions:
+        - downloads
+        - external-links
+        - dialogs
+    - type: panel
+      name: App ideas
+      source: ./workspace/ideas.html
+      permissions:
+        - downloads
+        - external-links
+        - dialogs
+    - type: panel
+      name: Research runs
+      source: ./workspace/runs.html
+      permissions:
+        - downloads
+        - external-links
+        - dialogs
+    - type: panel
+      name: Evidence review
+      source: ./workspace/evidence.html
+      permissions:
+        - downloads
+        - external-links
+        - dialogs
+    - type: panel
+      name: Research results
+      source: ./workspace/results.html
+      permissions:
+        - downloads
+        - external-links
+        - dialogs

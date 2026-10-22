@@ -1,0 +1,27 @@
+// Isolated integration fixture; never reads or changes the operator's login.
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+const runtime = process.env.BAHULAM_RUNTIME;
+const fixture = process.env.RESEARCH_PREVIEW_DATA;
+if (!runtime || !fixture) throw new Error('This integration fixture requires BAHULAM_RUNTIME and RESEARCH_PREVIEW_DATA');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+process.env.BAHULAM_HOME = path.join(fixture, 'bahulam');
+process.env.B0_TOKEN = 'local-integration-fixture-not-a-real-login';
+process.env.BRAVE_API_KEY = '';
+const plugins = path.join(process.env.BAHULAM_HOME, 'plugins');
+fs.mkdirSync(plugins, { recursive: true });
+fs.cpSync(root, path.join(plugins, 'app-research'), { recursive: true, filter: file => !['.git', '.local', 'node_modules'].some(part => path.relative(root, file).split(path.sep).includes(part)) });
+const project = path.join(fixture, 'project'); fs.mkdirSync(project);
+fs.writeFileSync(path.join(project, 'README.md'), '# Research integration fixture\n');
+const sessions = await import(pathToFileURL(path.join(runtime, 'src/local-service/session-store.mjs')));
+const { startLocalWorkspaceService } = await import(pathToFileURL(path.join(runtime, 'src/local-service/server.mjs')));
+const grant = sessions.createLocalWorkspaceSession({ targetPath: project, cwd: project, kind: 'plugin-app-research' });
+const stored = sessions.loadLocalWorkspaceSession(grant.session.id);
+stored.plugin = { name: 'app-research', plugin_dir: path.join(plugins, 'app-research') };
+sessions.writeLocalWorkspaceSession(stored);
+const service = await startLocalWorkspaceService(grant);
+console.log(`Bahulam workspace: ${service.url}`);
+const url = new URL(service.url); url.pathname = '/plugin-view/app-research/workspace/start.html';
+console.log(`Research preview: ${url}`);
+for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, async () => { await service.close(); process.exit(0); });
