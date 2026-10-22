@@ -2,6 +2,15 @@
   "$schema": "https://docs.bahulam.ai/schemas/plugin-registry-1.json",
   "plugins": [
     {
+      "name": "app-research",
+      "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
+      "ref": "main",
+      "subdir": "plugins/app-research",
+      "description": "Day 1 app-idea validation workspace with resumable research runs, source-backed evidence review, consolidated results, and copy-ready agent prompts",
+      "author": "Sree",
+      "tags": ["research", "product", "validation", "evidence", "agents", "state"]
+    },
+    {
       "name": "browser-use",
       "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
       "ref": "main",

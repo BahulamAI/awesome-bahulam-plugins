@@ -1,0 +1,6 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><title>App ideas · Fieldnotes</title></head><body data-panel="ideas"><script>
+const localToken = new URLSearchParams(location.search).get('token') || '';
+const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = './styles.css?token=' + encodeURIComponent(localToken); document.head.appendChild(css);
+const script = document.createElement('script'); script.type = 'module'; script.src = './app.js?token=' + encodeURIComponent(localToken); document.body.appendChild(script);
+</script></body></html>
