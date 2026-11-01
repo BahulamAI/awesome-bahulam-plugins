@@ -4,6 +4,11 @@ This is the minimum Bahulam-native plugin skeleton for a real outcome runtime.
 It is intentionally not listed in `registry.json`; copy it when authoring a new
 plugin.
 
+Read the [plugin development guide](../../docs/plugin-development.md) before
+publishing. It covers shared styling, safe text rendering, accessibility, and
+local/hosted adapters. This template demonstrates the local outcome loop; it
+does not implement the [proposed hosted chat attachment contract](../../docs/plugin-ui-contract.md).
+
 ```bash
 cp -R templates/outcome-runtime-plugin plugins/my-plugin
 ```

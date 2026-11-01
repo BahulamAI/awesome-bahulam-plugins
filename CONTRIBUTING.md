@@ -1,5 +1,10 @@
 # Contributing
 
+Start with the [plugin development guide](./docs/plugin-development.md).
+New UI should follow its visual and lifecycle requirements. Hosted chat UI is
+specified in the [proposed attachment contract](./docs/plugin-ui-contract.md);
+its registration fields are not supported by the current manifest loader.
+
 ## Adding your plugin to the registry
 
 1. Fork this repo.
@@ -47,13 +52,16 @@ than maintaining separate backend copies.
 - Everything lives under `config:` — `config.tools`,
   `config.workspace` (entry agent path), `config.agents_from`
   (subagent folder), `config.views`, `config.mcpServers`, and
-  `config.composes`. Unknown keys are dropped.
+  `config.composes`. Unknown executable fields may be dropped; do not add
+  proposed UI registration fields and assume they will run. Development CLI
+  capability metadata (`skills`, `connectors`, `outcome_runtime`, `policy`) is
+  descriptive and requires explicit host support for enforcement.
 - Agent files referenced by `config.workspace` and `config.agents_from`
   use the backend-compatible `apiVersion: agent.framework/v1` shape:
   `metadata` for identity, `agent` for prompt/runtime caps, and top-level
   `tools` for the allowlist.
 - Each tool entry points at its module with `tool: ./tools/<name>.mjs`
-  (the legacy `handler:` key is not accepted)
+  (use the canonical `tool:` key in new manifests)
 - Tool names: `^[A-Za-z_][A-Za-z0-9_-]{0,63}$`, must not shadow built-ins
 - Tool modules must be pure ESM (`.mjs`), no CommonJS
 - Every tool module MUST export `async call(args, options)` returning
@@ -62,6 +70,8 @@ than maintaining separate backend copies.
 
 ## Workspace views
 
+- Use the shared CLI stylesheet and `--ws-*` tokens; see the development guide.
+- Render untrusted strings with escaping or `textContent`, never raw `innerHTML`.
 - Views are sandboxed iframes; call tools via `POST /api/tools/execute`
   and read state via `POST /api/plugin-state/<plugin>`
 - Subscribe to `/api/events` and re-render on `plugin_state_changed`.
@@ -69,6 +79,9 @@ than maintaining separate backend copies.
   `{kind: '*'}` pulse — the server emits it when another process (the
   terminal agent, a headless run) writes your state. A view that renders
   once at mount will be rejected: the panel is a live shared canvas.
+- Keep local HTTP/token handling behind an adapter. The hosted chat proposal
+  uses registered UI resources and scoped host operations; local API access is
+  not a hosted authorization model.
 
 ## Security policy
 
