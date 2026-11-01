@@ -9,7 +9,7 @@
       <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT">
     </a>
     <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg" alt="Platform">
-    <img src="https://img.shields.io/badge/plugins-7-brightgreen.svg" alt="Plugins">
+    <img src="https://img.shields.io/badge/plugins-8-brightgreen.svg" alt="Plugins">
   </p>
 </p>
 
@@ -44,6 +44,24 @@ clear path to hosted SaaS execution through MCP/Context Forge.
 ## 🚀 Featured Plugins
 
 <div style="display: flex; flex-wrap: wrap; gap: 24px; margin: 24px 0;">
+
+<div style="flex: 1 1 calc(50% - 24px); min-width: 280px; border: 1px solid #e1e4e8; border-radius: 8px; padding: 20px; background: #f6f8fa;">
+
+### [app-research](./plugins/app-research)
+**Day 1 app-idea validation workspace** · `research` `product` `evidence` `agents`
+
+Define a specific app hypothesis, plan bounded research runs, collect public sources, review exact evidence by hand, and consolidate findings. The first **Start here** panel explains the workflow and provides copy-ready prompts for the research agents.
+
+- `tools/` — brief, run, source, evidence, review, and export operations
+- `config/agents/` — director, demand analyst, and demand skeptic
+- `workspace/` — guided start page, idea, run, review, and results panels
+- `node selftest.mjs` — offline state and research-flow tests
+
+```bash
+bahulam install app-research
+```
+
+</div>
 
 <div style="flex: 1 1 calc(50% - 24px); min-width: 280px; border: 1px solid #e1e4e8; border-radius: 8px; padding: 20px; background: #f6f8fa;">
 
