@@ -2,11 +2,12 @@ apiVersion: bahulam.plugin/1
 kind: Plugin
 metadata:
   name: azure-cost-analyzer
-  version: 0.2.0
+  version: 0.3.0
   description: >
     Azure Cost Management analysis plugin. Reads cost data from Azure
-    subscriptions, surfaces budget alerts, and generates cost reports.
-    Credentials are stored in local plugin state — the LLM never sees them.
+    subscriptions, surfaces budget alerts, and records what an investigation
+    concluded — not just the raw figures it was based on. Credentials are
+    stored in local plugin state — the LLM never sees them.
   author: BahulamAI
   repository: https://github.com/BahulamAI/awesome-bahulam-plugins
 
@@ -16,6 +17,12 @@ config:
   #
   # Split into a run and its rows because provenance is the point: a figure with
   # no capture time, scope or currency is a number a reader cannot check.
+  #
+  # `cost_runs`/`cost_rows` are what the tools read — raw evidence. Azure's own
+  # portal already shows that better than this panel can. `findings` is the
+  # other half: what an investigation concluded from that evidence, and what
+  # it proposes doing about it. That's the row with no equivalent in the
+  # Azure portal, so it's the one this plugin exists to keep.
   state:
     tables:
       - name: cost_runs
@@ -39,6 +46,20 @@ config:
           - { name: label, type: text }
           # INTEGER minor units. Never a decimal — nothing downstream rounds twice.
           - { name: amount_minor, type: integer }
+      - name: findings
+        columns:
+          - { name: id, type: integer, primary: true, autoincrement: true }
+          - { name: captured_at, type: text, not_null: true }
+          # Which run's figures this finding is based on, so a reader can check it.
+          - { name: related_run_id, type: integer, references: cost_runs(id) }
+          - { name: conclusion, type: text, not_null: true }
+          - { name: severity, type: text }
+          # What the finding proposes doing about it, if anything. Null for a
+          # finding that is informational only.
+          - { name: recommended_action, type: text }
+          - { name: requires_approval, type: integer, not_null: true, default: 0 }
+          # open | approved | dismissed
+          - { name: status, type: text, not_null: true, default: "'open'" }
 
   # Declared config fields: the workspace panel renders a settings form
   # from this definition. Values are stored in the plugin's local SQLite
@@ -167,13 +188,42 @@ config:
             type: integer
             description: Number of days to look back (default 30)
 
+    - name: azure_record_finding
+      description: >
+        Record what an investigation concluded — and what it proposes doing
+        about it, if anything. Use this after reading cost data with the
+        tools above, not instead of them: a finding without a related_run_id
+        is a conclusion a reader cannot check. Set requires_approval=true for
+        any proposed action that changes or removes a resource; recording a
+        finding never performs the action itself.
+      tool: ./tools/record-finding.mjs
+      parameters:
+        type: object
+        properties:
+          conclusion:
+            type: string
+            description: What was concluded, in plain language.
+          related_run_id:
+            type: integer
+            description: id of the cost_runs row this conclusion is based on.
+          severity:
+            type: string
+            enum: [info, warning, critical]
+          recommended_action:
+            type: string
+            description: What this finding proposes doing, if anything.
+          requires_approval:
+            type: boolean
+            description: True if the recommended action needs the user's go-ahead before anything executes it.
+        required: [conclusion]
+
   views:
     # The sole view: a deterministic reader of this plugin's own SQLite state.
     #
     # It interprets nothing. Every figure on screen is a row the tools wrote,
     # shown with the capture time, scope and currency it was written with, so a
     # reader can check it. Charts, composition and agent-authored layout are a
-    # separate concern and deliberately absent — see PRD-108 section 28.5.
+    # separate concern and deliberately absent.
     - name: "Azure Cost"
       type: panel
       source: ./workspace/state.html

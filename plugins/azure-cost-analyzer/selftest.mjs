@@ -17,6 +17,7 @@ import { call as budgetAlerts } from './tools/budget-alerts.mjs';
 import { call as resourcesByType } from './tools/resources-by-type.mjs';
 import { call as costByDimension } from './tools/cost-by-dimension.mjs';
 import { call as costTrend } from './tools/cost-trend.mjs';
+import { call as recordFinding } from './tools/record-finding.mjs';
 
 let passed = 0;
 let failed = 0;
@@ -35,8 +36,13 @@ function makeState(config) {
     set(key) { this.writes.push(key); },
     query(sql, params = []) {
       this.sql.push({ sql: String(sql).replace(/\s+/g, ' ').trim(), params });
-      // The one read the snapshot helper performs.
-      if (/last_insert_rowid/.test(sql)) return [{ id: this.sql.filter(e => /INSERT INTO cost_runs/.test(e.sql)).length }];
+      // The one read any insert helper performs: id = count of inserts so far
+      // into whichever table was inserted into last.
+      if (/last_insert_rowid/.test(sql)) {
+        const lastInsert = [...this.sql].reverse().find((e) => /^INSERT INTO/.test(e.sql));
+        const table = lastInsert?.sql.match(/^INSERT INTO (\w+)/)?.[1];
+        return [{ id: this.sql.filter((e) => new RegExp(`^INSERT INTO ${table}\\b`).test(e.sql)).length }];
+      }
       return [];
     },
     getConfig(key) { return config[key] ?? null; },
@@ -246,6 +252,42 @@ console.log('\ntools write nothing; they only return data');
   const amount = rows[0]?.params?.[4];
   ok('money stored as integer minor units', amount === 41230, String(amount));
   ok('currency exponent recorded beside it', runs[0]?.params?.[4] === 2, String(runs[0]?.params?.[4]));
+}
+
+console.log('\nazure_record_finding records a conclusion, separately from raw snapshots');
+{
+  const state = makeState(FULL);
+
+  const missing = await recordFinding({}, { state: makeState(FULL) });
+  ok('rejects an empty conclusion', missing.success === false && /conclusion is required/.test(missing.output));
+
+  const informational = await recordFinding(
+    { conclusion: 'App Service plan P2v3 in rg-staging is idle (0% CPU, 30d)', related_run_id: 3, severity: 'info' },
+    { state },
+  );
+  ok('succeeds with just a conclusion', informational.success === true);
+  ok('does not require approval by default', informational.output.requires_approval === false);
+
+  const actionable = await recordFinding(
+    {
+      conclusion: 'Orphaned public IP has incurred cost for 45 days with nothing attached',
+      related_run_id: 7,
+      severity: 'warning',
+      recommended_action: 'Delete the orphaned public IP',
+      requires_approval: true,
+    },
+    { state },
+  );
+  ok('flags a destructive recommendation as needing approval', actionable.output.requires_approval === true);
+
+  const rows = state.rowsFor('findings');
+  ok('recorded both findings', rows.length === 2);
+  ok('links the first finding back to its evidence', rows[0].params[1] === 3);
+  ok('stores the recommended action text', rows[1].params[4] === 'Delete the orphaned public IP');
+
+  // This tool is inert: it must never touch cost_runs/cost_rows, and it must
+  // never itself call Azure — recording a recommendation is not performing it.
+  ok('writes only to findings, never to cost_runs/cost_rows', state.rowsFor('cost_runs').length === 0 && state.rowsFor('cost_rows').length === 0);
 }
 
 console.log('\nminor units survive the round trip');

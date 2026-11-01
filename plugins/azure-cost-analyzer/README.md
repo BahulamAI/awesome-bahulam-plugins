@@ -31,6 +31,23 @@ Recording is deliberately best-effort. A plugin whose database is unavailable
 still answers the question: losing a snapshot costs the panel a card, while
 failing the tool costs the user their answer.
 
+## Findings: the other half of the record
+
+`cost_runs`/`cost_rows` are evidence — figures the Azure portal already shows
+better than this panel can. A third table, `findings`, is what an
+investigation concluded from that evidence and, where relevant, what it
+proposes doing about it:
+
+| Table | One row per | Carries |
+|---|---|---|
+| `findings` | a conclusion | capture time, the `cost_runs` row it's based on, the conclusion, severity, a recommended action, and whether that action needs approval |
+
+The `azure_record_finding` tool writes this table and nothing else — it never
+touches `cost_runs`/`cost_rows`, and it never performs the action it
+recommends. Marking `requires_approval=true` is a recorded fact, not a gate;
+deciding whether a proposed action actually runs belongs to the workspace's
+own remediation/executor flow, not to this plugin.
+
 ## The panel
 
 One view, **Azure Cost** (`workspace/state.html`): a deterministic reader of the
