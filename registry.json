@@ -13,7 +13,7 @@
     {
       "name": "azure-devops",
       "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
-      "ref": "development",
+      "ref": "main",
       "subdir": "plugins/azure-devops",
       "description": "Azure DevOps coworker tools for customer organizations: work items, project/team discovery, sprint snapshots, pipelines and PRs, executed by Bahulam with scoped connections and Microsoft Teams connectivity.",
       "author": "BahulamAI",
