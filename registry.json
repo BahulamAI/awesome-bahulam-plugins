@@ -11,6 +11,15 @@
       "tags": ["research", "product", "validation", "evidence", "agents", "state"]
     },
     {
+      "name": "azure-cost-analyzer",
+      "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
+      "ref": "main",
+      "subdir": "plugins/azure-cost-analyzer",
+      "description": "Azure Cost Management analysis — cost breakdowns by service, budget alerts, and recorded investigation findings (what was concluded and what is proposed, linked back to the evidence). Credentials stored locally via plugin config state; the LLM never sees them.",
+      "author": "BahulamAI",
+      "tags": ["azure", "cost", "finops", "cloud", "budget", "config", "state", "approvals"]
+    },
+    {
       "name": "browser-use",
       "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
       "ref": "main",

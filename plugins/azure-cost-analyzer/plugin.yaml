@@ -1,0 +1,229 @@
+apiVersion: bahulam.plugin/1
+kind: Plugin
+metadata:
+  name: azure-cost-analyzer
+  version: 0.3.0
+  description: >
+    Azure Cost Management analysis plugin. Reads cost data from Azure
+    subscriptions, surfaces budget alerts, and records what an investigation
+    concluded — not just the raw figures it was based on. Credentials are
+    stored in local plugin state — the LLM never sees them.
+  author: BahulamAI
+  repository: https://github.com/BahulamAI/awesome-bahulam-plugins
+
+config:
+  # Where tool results land. Declared here so the host creates them, the tools
+  # write them, and the panel reads them — one schema, three consumers.
+  #
+  # Split into a run and its rows because provenance is the point: a figure with
+  # no capture time, scope or currency is a number a reader cannot check.
+  #
+  # `cost_runs`/`cost_rows` are what the tools read — raw evidence. Azure's own
+  # portal already shows that better than this panel can. `findings` is the
+  # other half: what an investigation concluded from that evidence, and what
+  # it proposes doing about it. That's the row with no equivalent in the
+  # Azure portal, so it's the one this plugin exists to keep.
+  state:
+    tables:
+      - name: cost_runs
+        columns:
+          - { name: id, type: integer, primary: true, autoincrement: true }
+          - { name: captured_at, type: text, not_null: true }
+          - { name: tool, type: text, not_null: true }
+          # Which subscription and window this covers.
+          - { name: scope, type: text }
+          - { name: currency, type: text }
+          # Minor units are meaningless without it: JPY has no cents, KWD has three.
+          - { name: currency_exponent, type: integer }
+          - { name: note, type: text }
+      - name: cost_rows
+        columns:
+          - { name: id, type: integer, primary: true, autoincrement: true }
+          - { name: run_id, type: integer, not_null: true, references: cost_runs(id) }
+          # Preserves the order the tool reported, which is usually significance.
+          - { name: position, type: integer }
+          - { name: dimension, type: text }
+          - { name: label, type: text }
+          # INTEGER minor units. Never a decimal — nothing downstream rounds twice.
+          - { name: amount_minor, type: integer }
+      - name: findings
+        columns:
+          - { name: id, type: integer, primary: true, autoincrement: true }
+          - { name: captured_at, type: text, not_null: true }
+          # Which run's figures this finding is based on, so a reader can check it.
+          - { name: related_run_id, type: integer, references: cost_runs(id) }
+          - { name: conclusion, type: text, not_null: true }
+          - { name: severity, type: text }
+          # What the finding proposes doing about it, if anything. Null for a
+          # finding that is informational only.
+          - { name: recommended_action, type: text }
+          - { name: requires_approval, type: integer, not_null: true, default: 0 }
+          # open | approved | dismissed
+          - { name: status, type: text, not_null: true, default: "'open'" }
+
+  # Declared config fields: the workspace panel renders a settings form
+  # from this definition. Values are stored in the plugin's local SQLite
+  # KV table under the `_config` key. Tool handlers read them via
+  # `state.getConfig(fieldName)`.
+  config:
+    fields:
+      - name: subscription_id
+        type: string
+        label: "Azure Subscription ID"
+        required: true
+        credential: false
+        description: "The UUID of the Azure subscription to analyze"
+        placeholder: "00000000-0000-0000-0000-000000000000"
+      - name: tenant_id
+        type: string
+        label: "Azure Tenant ID"
+        required: true
+        credential: false
+        description: "Azure AD tenant ID for authentication"
+        placeholder: "00000000-0000-0000-0000-000000000000"
+      - name: client_id
+        type: string
+        label: "Service Principal Client ID"
+        required: true
+        credential: false
+        description: "App registration client ID with Cost Management Reader role"
+        placeholder: "00000000-0000-0000-0000-000000000000"
+      - name: client_secret
+        type: password
+        label: "Service Principal Secret"
+        required: true
+        credential: true
+        description: "Client secret for the service principal (stored locally, never sent to LLM)"
+        placeholder: ""
+      - name: currency
+        type: select
+        label: "Currency"
+        required: false
+        default: "USD"
+        options: ["USD", "EUR", "GBP", "INR", "JPY", "AUD"]
+        description: "Currency for cost display"
+
+  # A portable, plugin-owned procedure. The CLI loader reads this from the
+  # installed package; it is not an implicit project-level AGENTS.md.
+  skills:
+    - id: azure-cost-investigation
+      source: ./skills/azure-cost-investigation
+      description: Investigate Azure spend safely and turn findings into an actionable cost review.
+      applies_to: [azure-cost-analyzer]
+      availability: [cli, cli-remote, ide, chat, video, mobile]
+
+  tools:
+    - name: azure_list_subscriptions
+      description: >
+        List accessible Azure subscriptions with current month-to-date cost.
+        Reads credentials from plugin config (never exposed to LLM).
+      tool: ./tools/list-subscriptions.mjs
+      parameters:
+        type: object
+        properties: {}
+
+    - name: azure_cost_by_service
+      description: >
+        Get cost breakdown by Azure service for the current billing period.
+        Reads credentials from plugin config.
+      tool: ./tools/cost-by-service.mjs
+      parameters:
+        type: object
+        properties:
+          days:
+            type: integer
+            description: Number of days to look back (default 30)
+
+    - name: azure_budget_alerts
+      description: >
+        Check configured Azure budgets and alert on any that exceed threshold.
+        Reads credentials from plugin config.
+      tool: ./tools/budget-alerts.mjs
+      parameters:
+        type: object
+        properties:
+          threshold_percent:
+            type: integer
+            description: Alert when budget consumed exceeds this percentage (default 80)
+
+    - name: azure_resources_by_type
+      description: >
+        Get Azure cost breakdown by resource type with individual resource
+        details including region, resource group, and tags. Drill-down view.
+      tool: ./tools/resources-by-type.mjs
+      parameters:
+        type: object
+        properties:
+          days:
+            type: integer
+            description: Number of days to look back (default 30)
+          filter_type:
+            type: string
+            description: Optional filter to a specific resource type
+
+    - name: azure_cost_by_dimension
+      description: >
+        Get Azure costs aggregated by a chosen dimension: region,
+        resource_group, tag, or resource_type. Slice-and-dice analysis.
+      tool: ./tools/cost-by-dimension.mjs
+      parameters:
+        type: object
+        properties:
+          dimension:
+            type: string
+            enum: [region, resource_group, tag, resource_type]
+            description: Dimension to aggregate by (default region)
+          days:
+            type: integer
+            description: Number of days to look back (default 30)
+
+    - name: azure_cost_trend
+      description: >
+        Get daily Azure cost data points for trend line chart visualization.
+      tool: ./tools/cost-trend.mjs
+      parameters:
+        type: object
+        properties:
+          days:
+            type: integer
+            description: Number of days to look back (default 30)
+
+    - name: azure_record_finding
+      description: >
+        Record what an investigation concluded — and what it proposes doing
+        about it, if anything. Use this after reading cost data with the
+        tools above, not instead of them: a finding without a related_run_id
+        is a conclusion a reader cannot check. Set requires_approval=true for
+        any proposed action that changes or removes a resource; recording a
+        finding never performs the action itself.
+      tool: ./tools/record-finding.mjs
+      parameters:
+        type: object
+        properties:
+          conclusion:
+            type: string
+            description: What was concluded, in plain language.
+          related_run_id:
+            type: integer
+            description: id of the cost_runs row this conclusion is based on.
+          severity:
+            type: string
+            enum: [info, warning, critical]
+          recommended_action:
+            type: string
+            description: What this finding proposes doing, if anything.
+          requires_approval:
+            type: boolean
+            description: True if the recommended action needs the user's go-ahead before anything executes it.
+        required: [conclusion]
+
+  views:
+    # The sole view: a deterministic reader of this plugin's own SQLite state.
+    #
+    # It interprets nothing. Every figure on screen is a row the tools wrote,
+    # shown with the capture time, scope and currency it was written with, so a
+    # reader can check it. Charts, composition and agent-authored layout are a
+    # separate concern and deliberately absent.
+    - name: "Azure Cost"
+      type: panel
+      source: ./workspace/state.html
