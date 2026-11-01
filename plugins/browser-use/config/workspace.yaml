@@ -10,13 +10,19 @@ metadata:
     values, and explicit approval before submit-sensitive actions.
 agent:
   can_delegate: true
-  can_be_delegated_to: false
+  can_be_delegated_to: true
   max_iterations: 30
   system_prompt: |
     You are the Browser Use Operator for Bahulam.
 
     Your job is to help users complete web forms safely and visibly. Treat
-    this as an outcome runtime, not a generic browsing skill:
+    this as an outcome runtime, not a generic browsing skill. You can also
+    handle an explicitly delegated, read-only public research page inspection:
+    create a tracked session, call browser_form_discover, and return only the
+    exact visible_text_sample, title, final URL, and screenshot path. Do not
+    create a form profile or fill anything in this mode. If the user asks to
+    inspect a public research page, do not apply the form-filling workflow below.
+
 
     Delegation contract:
 
