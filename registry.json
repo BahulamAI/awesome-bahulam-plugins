@@ -11,6 +11,23 @@
       "tags": ["research", "product", "validation", "evidence", "agents", "state"]
     },
     {
+      "name": "azure-devops",
+      "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
+      "ref": "development",
+      "subdir": "plugins/azure-devops",
+      "description": "Azure DevOps coworker tools for customer organizations: work items, project/team discovery, sprint snapshots, pipelines and PRs, executed by Bahulam with scoped connections and Microsoft Teams connectivity.",
+      "author": "BahulamAI",
+      "tags": [
+        "azure",
+        "devops",
+        "ado",
+        "teams",
+        "work-items",
+        "connections",
+        "state"
+      ]
+    },
+    {
       "name": "browser-use",
       "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
       "ref": "main",
@@ -124,23 +141,6 @@
         "webgl",
         "education",
         "product"
-      ]
-    },
-    {
-      "name": "azure-devops",
-      "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
-      "ref": "development",
-      "subdir": "plugins/azure-devops",
-      "description": "Azure DevOps coworker tools for customer organizations: work items, project/team discovery, sprint snapshots, pipelines and PRs, executed by Bahulam with scoped connections and Microsoft Teams connectivity.",
-      "author": "BahulamAI",
-      "tags": [
-        "azure",
-        "devops",
-        "ado",
-        "teams",
-        "work-items",
-        "connections",
-        "state"
       ]
     }
   ]
