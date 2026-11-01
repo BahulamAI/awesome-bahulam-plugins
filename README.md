@@ -256,6 +256,11 @@ for the full contract.
 
 ## Authoring Templates
 
+- [Plugin development guide](./docs/plugin-development.md) — package, tools,
+  state, UI conventions, local development, and hosted preparation.
+- [Plugin UI and chat attachment contract](./docs/plugin-ui-contract.md) —
+  proposed hosted UI standard, MCP Apps integration, durable attachments, and
+  implementation plan. Generic hosted chat attachments are not implemented yet.
 - [`templates/outcome-runtime-plugin`](./templates/outcome-runtime-plugin) —
   the minimum Bahulam-native skeleton for a plugin with an entry agent, helper
   agent, tools, state, live workspace panel, and offline selftest.
