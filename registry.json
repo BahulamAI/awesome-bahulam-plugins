@@ -11,6 +11,23 @@
       "tags": ["research", "product", "validation", "evidence", "agents", "state"]
     },
     {
+      "name": "azure-devops",
+      "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
+      "ref": "main",
+      "subdir": "plugins/azure-devops",
+      "description": "Azure DevOps coworker tools for customer organizations: work items, project/team discovery, sprint snapshots, pipelines and PRs, executed by Bahulam with scoped connections and Microsoft Teams connectivity.",
+      "author": "BahulamAI",
+      "tags": [
+        "azure",
+        "devops",
+        "ado",
+        "teams",
+        "work-items",
+        "connections",
+        "state"
+      ]
+    },
+    {
       "name": "browser-use",
       "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
       "ref": "main",
@@ -71,7 +88,9 @@
       "subdir": "plugins/raspberry-pi",
       "description": "Raspberry Pi GPIO and I2C sensor operations runtime with local, SSH, and fully simulated virtual board targets, approval-gated GPIO writes, a live board/pin/approval panel, and datasheet-grounded LLM/OS advisor tools that recommend (never install) a software snapshot",
       "author": "Rohit",
-      "tags": ["gpio", "hardware", "sensors", "ssh", "simulation", "iot", "state", "approvals", "advisor", "llm", "os"],
+      "tags": ["gpio", "hardware", "sensors", "ssh", "simulation", "iot", "state", "approvals", "advisor", "llm", "os"]
+    },
+    {
       "name": "threejs-studio",
       "repository": "https://github.com/BahulamAI/awesome-bahulam-plugins",
       "ref": "main",
